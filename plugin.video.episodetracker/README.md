@@ -20,12 +20,31 @@ single "next episodes" workflow.
 
 ## Installation
 
-1. Install the CocoScrapers repository/module
-   (`repository.cocoscrapers` → `script.module.cocoscrapers`).
-2. Install this add-on from zip: zip the `plugin.video.episodetracker` folder
-   and use **Add-ons → Install from zip file**, or drop the folder into your
-   Kodi `addons` directory.
-3. Open the add-on. It will prompt you to authorize Trakt and Real-Debrid.
+Enable **Settings → System → Add-ons → Unknown sources** first.
+
+### Option A — via the repository (recommended)
+
+1. **Settings → File manager → Add source → \<None\>**, enter
+   `https://bmoorewiz.github.io/et/` and name it `episodetracker`.
+2. **Add-ons → Install from zip file → episodetracker →
+   repository.episodetracker →** pick the zip.
+3. **Add-ons → Install from repository → Episode Tracker Repository →
+   Video add-ons → Episode Tracker → Install.**
+
+Kodi then updates the add-on natively, in addition to its own built-in
+updater.
+
+### Option B — direct zip
+
+Download and install
+`plugin.video.episodetracker-<version>.zip` from the repo root via
+**Add-ons → Install from zip file**.
+
+### Then
+
+Install the CocoScrapers module (`repository.cocoscrapers` →
+`script.module.cocoscrapers`) and enable at least one torrent provider, then
+open Episode Tracker and authorize Trakt and Real-Debrid.
 
 ## Setup
 
