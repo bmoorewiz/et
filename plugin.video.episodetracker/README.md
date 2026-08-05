@@ -57,11 +57,46 @@ credentials in `resources/lib/trakt.py` via `DEFAULT_CLIENT_ID` /
   the end, so the show's next episode appears on your next visit.
 - Right-click an episode for **Mark as watched on Trakt** and **Refresh**.
 
+## Updating
+
+The add-on can update itself. It checks the configured GitHub repo/branch for
+a newer `addon.xml` version, and if it finds one:
+
+- an **"Update available: vX.Y.Z"** entry appears at the top of the main menu,
+- selecting it asks for confirmation, then downloads and installs the matching
+  `plugin.video.episodetracker-X.Y.Z.zip`,
+- Kodi is asked to reload add-ons, and you're offered a restart to finish.
+
+Checks run on a background thread (default every 24h), so menus never stall on
+the network. **Settings → Updates → Check for updates now** forces an
+immediate check.
+
+> **The update source must be reachable without credentials.** The default
+> transport is `raw.githubusercontent.com`, which only serves **public**
+> repositories. If `bmoorewiz/et` is private, update checks will silently
+> fail (they're logged, not shouted).
+>
+> Two ways to make it work:
+> 1. **Make the repo public** — recommended, and needs no further setup.
+> 2. **Set an access token** in *Settings → Updates → Access token*. The
+>    add-on then uses the GitHub contents API instead, which can read private
+>    repos. Be aware this stores a GitHub token in plain text in Kodi's
+>    settings — use a fine-grained token limited to read-only *Contents* on
+>    this one repository, never a broad classic token.
+
+Downloaded zips are validated before extraction: archives containing absolute
+paths, `..` traversal, or files outside the add-on folder are rejected.
+
+To publish an update: bump `version=` in `addon.xml`, run `./build.sh`, and
+commit both the source and the new zip to the branch clients track.
+
 ## Settings overview
 
 - **Accounts** — Trakt and Real-Debrid authorization.
 - **Playback** — auto-play, quality filters, minimum seeders, scrobble options.
 - **Lists** — aired-only filter, sort order, source cache duration.
+- **Updates** — auto-check toggle, interval, repo/branch, optional token,
+  manual check.
 - **Tools** — clear source cache, open CocoScrapers settings, verbose logging.
 
 ## Notes / disclaimer

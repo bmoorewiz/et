@@ -43,6 +43,22 @@ def lang(string_id):
 		return ''
 
 
+def langf(string_id, *args):
+	"""Localized string with % formatting applied.
+
+	Falls back to the unformatted text if the string is missing or its
+	placeholders do not match the supplied arguments, so a translation gap can
+	never raise mid-operation.
+	"""
+	text = lang(string_id)
+	if not args:
+		return text
+	try:
+		return text % args
+	except Exception:
+		return text
+
+
 def setting(key, default=''):
 	try:
 		value = addon.getSetting(key)

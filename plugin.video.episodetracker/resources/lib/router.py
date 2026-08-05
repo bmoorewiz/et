@@ -13,6 +13,7 @@ from resources.lib import realdebrid
 from resources.lib import scrapers
 from resources.lib import cache
 from resources.lib import player
+from resources.lib import updater
 
 
 def _encode(obj):
@@ -46,6 +47,10 @@ def dispatch():
 		return _auth(realdebrid.authenticate)
 	if action == 'rd_revoke':
 		return _revoke(realdebrid.revoke)
+	if action == 'check_updates':
+		return updater.check_and_prompt()
+	if action == 'install_update':
+		return updater.prompt_install(params['version'])
 	if action == 'clear_cache':
 		return clear_cache()
 	if action == 'coco_settings':
@@ -63,6 +68,14 @@ def dispatch():
 # ---------------------------------------------------------------------------
 
 def main_menu():
+	# A previously-cached update result is shown immediately; the refresh for
+	# the next visit happens on a background thread so the menu never stalls.
+	pending = updater.pending_update()
+	if pending:
+		control.add_directory_item(
+			'[COLOR lime]%s[/COLOR]' % (control.langf(33040, pending)),
+			{'action': 'install_update', 'version': pending}, is_folder=False)
+
 	if not scrapers.available():
 		control.add_directory_item(
 			'[COLOR red]%s[/COLOR]' % control.lang(33008),
@@ -83,10 +96,17 @@ def main_menu():
 			'[COLOR orange]%s[/COLOR]' % control.lang(33005),
 			{'action': 'rd_auth'}, is_folder=False)
 
+	if not pending:
+		control.add_directory_item(
+			control.lang(33029), {'action': 'check_updates'}, is_folder=False)
+
 	control.add_directory_item(
 		control.lang(33003), {'action': 'settings'}, is_folder=False)
 
 	control.end_directory(content='')
+
+	# fire-and-forget refresh of the cached update state
+	updater.auto_check()
 
 
 def next_episodes_menu(refresh=False):
@@ -165,7 +185,7 @@ def sources_menu(entry):
 	pd.create(control.addon_name, control.lang(33011))
 
 	def cb(percent, count):
-		pd.update(percent, control.lang(33025) % count)
+		pd.update(percent, control.langf(33025, count))
 
 	try:
 		sources = scrapers.scrape(entry, progress_cb=cb)

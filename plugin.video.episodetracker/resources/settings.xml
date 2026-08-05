@@ -41,6 +41,15 @@
 		<setting id="cache.hours" type="slider" label="32063" default="6" range="1,1,48" option="int" /><!-- Source cache (hours) -->
 	</category>
 
+	<category label="32100"><!-- Updates -->
+		<setting id="updates.enabled" type="bool" label="32101" default="true" /><!-- Automatically check for updates -->
+		<setting id="updates.interval" type="slider" label="32102" default="24" range="1,1,168" option="int" subsetting="true" enable="eq(-1,true)" /><!-- Check interval (hours) -->
+		<setting id="updates.repo" type="text" label="32103" default="bmoorewiz/et" /><!-- Repository (owner/repo) -->
+		<setting id="updates.branch" type="text" label="32104" default="claude/episode-tracker-kodi-app-qu73ll" /><!-- Branch -->
+		<setting id="updates.token" type="text" label="32106" default="" option="hidden" /><!-- Access token (private repos only) -->
+		<setting type="action" label="32105" action="RunPlugin(plugin://plugin.video.episodetracker/?action=check_updates)" option="close" /><!-- Check for updates now -->
+	</category>
+
 	<category label="32080"><!-- Tools -->
 		<setting type="action" label="32081" action="RunPlugin(plugin://plugin.video.episodetracker/?action=clear_cache)" option="close" /><!-- Clear source cache -->
 		<setting type="action" label="32082" action="RunPlugin(plugin://plugin.video.episodetracker/?action=coco_settings)" option="close" /><!-- Open CocoScrapers settings -->

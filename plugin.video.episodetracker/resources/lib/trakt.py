@@ -92,7 +92,7 @@ def authenticate():
 
 	pd = control.progress
 	pd.create(control.lang(33004),
-			  control.lang(33015) % verify_url + '\n[B]%s[/B]' % user_code)
+			  control.langf(33015, verify_url) + '\n[B]%s[/B]' % user_code)
 	deadline = time.time() + expires_in
 	success = False
 	try:
@@ -102,7 +102,7 @@ def authenticate():
 			remaining = int(deadline - time.time())
 			percent = int(100 * (1 - remaining / float(expires_in)))
 			pd.update(percent,
-					  control.lang(33015) % verify_url + '\n[B]%s[/B]\n%s'
+					  control.langf(33015, verify_url) + '\n[B]%s[/B]\n%s'
 					  % (user_code, control.lang(33016)))
 			control.sleep(interval * 1000)
 			try:

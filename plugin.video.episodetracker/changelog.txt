@@ -1,3 +1,14 @@
+v1.0.1
+- Added a built-in update checker. The add-on checks GitHub for a newer
+  version on a configurable interval, shows an "Update available" entry on
+  the main menu, and installs the new zip after you confirm.
+- Update source (repository / branch) is configurable in Settings > Updates,
+  with an optional access token for private repositories.
+- Downloaded update zips are validated before extraction (rejects archives
+  containing absolute paths, directory traversal, or out-of-tree files).
+- Localized strings now format defensively so a missing translation cannot
+  raise mid-operation.
+
 v1.0.0
 - Initial release.
 - Trakt.tv device authentication.

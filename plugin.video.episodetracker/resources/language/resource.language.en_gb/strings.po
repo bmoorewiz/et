@@ -146,6 +146,34 @@ msgctxt "#32063"
 msgid "Source cache (hours)"
 msgstr ""
 
+msgctxt "#32100"
+msgid "Updates"
+msgstr ""
+
+msgctxt "#32101"
+msgid "Automatically check for updates"
+msgstr ""
+
+msgctxt "#32102"
+msgid "Check interval (hours)"
+msgstr ""
+
+msgctxt "#32103"
+msgid "Repository (owner/repo)"
+msgstr ""
+
+msgctxt "#32104"
+msgid "Branch"
+msgstr ""
+
+msgctxt "#32105"
+msgid "Check for updates now"
+msgstr ""
+
+msgctxt "#32106"
+msgid "Access token (private repos only)"
+msgstr ""
+
 msgctxt "#32080"
 msgid "Tools"
 msgstr ""
@@ -265,4 +293,53 @@ msgstr ""
 
 msgctxt "#33025"
 msgid "Found %d sources"
+msgstr ""
+
+# Updater
+msgctxt "#33029"
+msgid "Check for updates"
+msgstr ""
+
+msgctxt "#33030"
+msgid "Checking for updates..."
+msgstr ""
+
+msgctxt "#33031"
+msgid "Update available: v%s"
+msgstr ""
+
+msgctxt "#33032"
+msgid "You are running the latest version (v%s)."
+msgstr ""
+
+msgctxt "#33033"
+msgid "Install version %s now? Currently installed: %s"
+msgstr ""
+
+msgctxt "#33034"
+msgid "Downloading update..."
+msgstr ""
+
+msgctxt "#33035"
+msgid "Installing update..."
+msgstr ""
+
+msgctxt "#33036"
+msgid "Updated to v%s. Restart Kodi to finish."
+msgstr ""
+
+msgctxt "#33037"
+msgid "Update failed."
+msgstr ""
+
+msgctxt "#33038"
+msgid "Could not reach the update server."
+msgstr ""
+
+msgctxt "#33039"
+msgid "Restart Kodi now?"
+msgstr ""
+
+msgctxt "#33040"
+msgid "Update available: v%s - select to install"
 msgstr ""
