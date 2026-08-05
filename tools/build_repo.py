@@ -140,6 +140,23 @@ def main():
 	current.sort(key=lambda n: (not n.startswith('repository.'), n))
 	write_index(DOCS, current)
 
+	# Publish the same listing and zips at the repository root as well, so the
+	# Pages site works whether its source folder is set to / or /docs. This
+	# also mirrors how working Kodi repos are laid out (umbrellaplug.github.io
+	# keeps index.html and its repository zip at the repo root). The root zip
+	# is additionally the path the add-on's built-in updater downloads, so it
+	# has to exist there regardless.
+	for stale in os.listdir(ROOT):
+		if stale.endswith('.zip') and stale not in current:
+			os.remove(os.path.join(ROOT, stale))
+	for zip_name in current:
+		addon_id = zip_name.rsplit('-', 1)[0]
+		shutil.copyfile(os.path.join(DOCS, addon_id, zip_name),
+						os.path.join(ROOT, zip_name))
+	write_index(ROOT, current)
+	# Jekyll would otherwise rebuild the root README into the served page.
+	open(os.path.join(ROOT, '.nojekyll'), 'w').close()
+
 	# GitHub Pages runs Jekyll by default, which skips files it considers
 	# special; .nojekyll makes it serve the tree verbatim.
 	open(os.path.join(DOCS, '.nojekyll'), 'w').close()
