@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.0.1" provider-name="bmoorewiz">
+<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.0.2" provider-name="bmoorewiz">
 	<requires>
 		<import addon="xbmc.python" version="3.0.0" />
 		<import addon="script.module.requests" version="2.22.0" />
@@ -20,6 +20,6 @@
 			<icon>resources/icon.png</icon>
 			<fanart>resources/fanart.png</fanart>
 		</assets>
-		<news>v1.0.1 - Built-in update checker: checks GitHub for new versions and installs them on confirmation.</news>
+		<news>v1.0.2 - Fixes the cache silently failing when the addon profile directory is missing, which could stop update notices appearing.</news>
 	</extension>
 </addon>

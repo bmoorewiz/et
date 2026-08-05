@@ -18,6 +18,13 @@ _cache_file = os.path.join(control.profile_path, 'cache.db')
 
 
 def _connect():
+	# sqlite cannot create its database inside a directory that does not
+	# exist. Guarantee it here rather than relying on the profile dir having
+	# been made earlier - otherwise every get/set silently no-ops and callers
+	# see a permanently empty cache.
+	directory = os.path.dirname(_cache_file)
+	if directory and not os.path.isdir(directory):
+		os.makedirs(directory, exist_ok=True)
 	conn = database.connect(_cache_file, timeout=30)
 	conn.execute(
 		'CREATE TABLE IF NOT EXISTS cache ('

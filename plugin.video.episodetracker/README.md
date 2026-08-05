@@ -71,18 +71,15 @@ Checks run on a background thread (default every 24h), so menus never stall on
 the network. **Settings → Updates → Check for updates now** forces an
 immediate check.
 
-> **The update source must be reachable without credentials.** The default
-> transport is `raw.githubusercontent.com`, which only serves **public**
-> repositories. If `bmoorewiz/et` is private, update checks will silently
-> fail (they're logged, not shouted).
->
-> Two ways to make it work:
-> 1. **Make the repo public** — recommended, and needs no further setup.
-> 2. **Set an access token** in *Settings → Updates → Access token*. The
->    add-on then uses the GitHub contents API instead, which can read private
->    repos. Be aware this stores a GitHub token in plain text in Kodi's
->    settings — use a fine-grained token limited to read-only *Contents* on
->    this one repository, never a broad classic token.
+Updates are read from `raw.githubusercontent.com`, which needs no credentials
+because `bmoorewiz/et` is a **public** repository — nothing to configure.
+
+> If you ever make the repository private, raw URLs stop working and update
+> checks will fail silently (they're logged, not shouted). In that case set
+> *Settings → Updates → Access token*; the add-on switches to the GitHub
+> contents API, which can read private repos. Note this stores a GitHub token
+> in plain text in Kodi's settings — use a fine-grained token limited to
+> read-only *Contents* on this one repository, never a broad classic token.
 
 Downloaded zips are validated before extraction: archives containing absolute
 paths, `..` traversal, or files outside the add-on folder are rejected.

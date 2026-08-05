@@ -1,3 +1,9 @@
+v1.0.2
+- Fixed the source/update cache silently doing nothing when the add-on
+  profile directory did not exist yet. The cache now creates it on demand.
+  Previously this could leave the "Update available" entry permanently
+  hidden even when a new version had been found.
+
 v1.0.1
 - Added a built-in update checker. The add-on checks GitHub for a newer
   version on a configurable interval, shows an "Update available" entry on
