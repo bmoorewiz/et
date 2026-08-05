@@ -1,0 +1,9 @@
+v1.0.0
+- Initial release.
+- Trakt.tv device authentication.
+- Real-Debrid device authentication.
+- "Next Episodes" list built from your Trakt watched progress (only aired, unwatched episodes).
+- Source scraping through the script.module.cocoscrapers module.
+- Real-Debrid cached-magnet resolution and playback.
+- Automatic Trakt scrobble / mark-as-watched on playback.
+- Refresh and clear-cache tools.

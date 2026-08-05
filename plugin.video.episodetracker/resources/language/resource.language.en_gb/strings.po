@@ -1,0 +1,268 @@
+# Episode Tracker language file
+msgid ""
+msgstr ""
+"Project-Id-Version: plugin.video.episodetracker\n"
+"Report-Msgid-Bugs-To: \n"
+"Language-Team: English (United Kingdom)\n"
+"Language: en_GB\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+# Settings - categories and labels (32010-32099)
+msgctxt "#32010"
+msgid "Accounts"
+msgstr ""
+
+msgctxt "#32011"
+msgid "Trakt.tv"
+msgstr ""
+
+msgctxt "#32012"
+msgid "Username"
+msgstr ""
+
+msgctxt "#32013"
+msgid "Access token"
+msgstr ""
+
+msgctxt "#32014"
+msgid "Refresh token"
+msgstr ""
+
+msgctxt "#32015"
+msgid "Token expiry"
+msgstr ""
+
+msgctxt "#32016"
+msgid "Authorize Trakt"
+msgstr ""
+
+msgctxt "#32017"
+msgid "Sign out of Trakt"
+msgstr ""
+
+msgctxt "#32018"
+msgid "Trakt app Client ID"
+msgstr ""
+
+msgctxt "#32019"
+msgid "Trakt app Client Secret"
+msgstr ""
+
+msgctxt "#32020"
+msgid "Real-Debrid"
+msgstr ""
+
+msgctxt "#32021"
+msgid "Username"
+msgstr ""
+
+msgctxt "#32022"
+msgid "Client ID"
+msgstr ""
+
+msgctxt "#32023"
+msgid "Client secret"
+msgstr ""
+
+msgctxt "#32024"
+msgid "Access token"
+msgstr ""
+
+msgctxt "#32025"
+msgid "Refresh token"
+msgstr ""
+
+msgctxt "#32026"
+msgid "Token expiry"
+msgstr ""
+
+msgctxt "#32027"
+msgid "Authorize Real-Debrid"
+msgstr ""
+
+msgctxt "#32028"
+msgid "Sign out of Real-Debrid"
+msgstr ""
+
+msgctxt "#32040"
+msgid "Playback"
+msgstr ""
+
+msgctxt "#32041"
+msgid "Auto-play best source"
+msgstr ""
+
+msgctxt "#32042"
+msgid "Maximum sources to show"
+msgstr ""
+
+msgctxt "#32043"
+msgid "Include 4K sources"
+msgstr ""
+
+msgctxt "#32044"
+msgid "Include 1080p sources"
+msgstr ""
+
+msgctxt "#32045"
+msgid "Include 720p sources"
+msgstr ""
+
+msgctxt "#32046"
+msgid "Include SD sources"
+msgstr ""
+
+msgctxt "#32047"
+msgid "Minimum seeders"
+msgstr ""
+
+msgctxt "#32048"
+msgid "Scrobble to Trakt"
+msgstr ""
+
+msgctxt "#32049"
+msgid "Mark watched at end of playback"
+msgstr ""
+
+msgctxt "#32050"
+msgid "Keep resolved torrents in Real-Debrid cloud"
+msgstr ""
+
+msgctxt "#32060"
+msgid "Lists"
+msgstr ""
+
+msgctxt "#32061"
+msgid "Only show aired episodes"
+msgstr ""
+
+msgctxt "#32062"
+msgid "Sort next episodes by"
+msgstr ""
+
+msgctxt "#32063"
+msgid "Source cache (hours)"
+msgstr ""
+
+msgctxt "#32080"
+msgid "Tools"
+msgstr ""
+
+msgctxt "#32081"
+msgid "Clear source cache"
+msgstr ""
+
+msgctxt "#32082"
+msgid "Open CocoScrapers settings"
+msgstr ""
+
+msgctxt "#32083"
+msgid "Verbose logging"
+msgstr ""
+
+# Runtime strings (33000+)
+msgctxt "#33000"
+msgid "Episode Tracker"
+msgstr ""
+
+msgctxt "#33001"
+msgid "Next Episodes"
+msgstr ""
+
+msgctxt "#33002"
+msgid "Refresh"
+msgstr ""
+
+msgctxt "#33003"
+msgid "Settings"
+msgstr ""
+
+msgctxt "#33004"
+msgid "Authorize Trakt"
+msgstr ""
+
+msgctxt "#33005"
+msgid "Authorize Real-Debrid"
+msgstr ""
+
+msgctxt "#33006"
+msgid "Trakt is not authorized. Open Settings to sign in."
+msgstr ""
+
+msgctxt "#33007"
+msgid "Real-Debrid is not authorized. Open Settings to sign in."
+msgstr ""
+
+msgctxt "#33008"
+msgid "CocoScrapers module is not installed or enabled."
+msgstr ""
+
+msgctxt "#33009"
+msgid "Loading your next episodes..."
+msgstr ""
+
+msgctxt "#33010"
+msgid "You have no next episodes. Watch something on a tracked show first."
+msgstr ""
+
+msgctxt "#33011"
+msgid "Scraping sources..."
+msgstr ""
+
+msgctxt "#33012"
+msgid "No sources found."
+msgstr ""
+
+msgctxt "#33013"
+msgid "Resolving with Real-Debrid..."
+msgstr ""
+
+msgctxt "#33014"
+msgid "Could not resolve a playable link."
+msgstr ""
+
+msgctxt "#33015"
+msgid "Enter this code at %s"
+msgstr ""
+
+msgctxt "#33016"
+msgid "Waiting for authorization..."
+msgstr ""
+
+msgctxt "#33017"
+msgid "Authorization successful."
+msgstr ""
+
+msgctxt "#33018"
+msgid "Authorization failed or timed out."
+msgstr ""
+
+msgctxt "#33019"
+msgid "Signed out."
+msgstr ""
+
+msgctxt "#33020"
+msgid "Source cache cleared."
+msgstr ""
+
+msgctxt "#33021"
+msgid "Play"
+msgstr ""
+
+msgctxt "#33022"
+msgid "Mark as watched on Trakt"
+msgstr ""
+
+msgctxt "#33023"
+msgid "Marked as watched."
+msgstr ""
+
+msgctxt "#33024"
+msgid "Refreshing..."
+msgstr ""
+
+msgctxt "#33025"
+msgid "Found %d sources"
+msgstr ""

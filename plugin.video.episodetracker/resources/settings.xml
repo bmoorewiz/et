@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings>
+	<category label="32010"><!-- Accounts -->
+		<setting label="32011" type="lsep" /><!-- Trakt.tv -->
+		<setting id="trakt.client_id" type="text" label="32018" default="" /><!-- Trakt app Client ID -->
+		<setting id="trakt.client_secret" type="text" label="32019" default="" option="hidden" /><!-- Trakt app Client Secret -->
+		<setting id="trakt.user" type="text" label="32012" default="" enable="false" />
+		<setting id="trakt.token" type="text" label="32013" default="" visible="false" />
+		<setting id="trakt.refresh" type="text" label="32014" default="" visible="false" />
+		<setting id="trakt.expires" type="text" label="32015" default="" visible="false" />
+		<setting type="action" label="32016" action="RunPlugin(plugin://plugin.video.episodetracker/?action=trakt_auth)" option="close" /><!-- Authorize Trakt -->
+		<setting type="action" label="32017" action="RunPlugin(plugin://plugin.video.episodetracker/?action=trakt_revoke)" option="close" /><!-- Sign out of Trakt -->
+
+		<setting label="32020" type="lsep" /><!-- Real-Debrid -->
+		<setting id="rd.user" type="text" label="32021" default="" enable="false" />
+		<setting id="rd.client_id" type="text" label="32022" default="" visible="false" />
+		<setting id="rd.client_secret" type="text" label="32023" default="" visible="false" />
+		<setting id="rd.token" type="text" label="32024" default="" visible="false" />
+		<setting id="rd.refresh" type="text" label="32025" default="" visible="false" />
+		<setting id="rd.expires" type="text" label="32026" default="" visible="false" />
+		<setting type="action" label="32027" action="RunPlugin(plugin://plugin.video.episodetracker/?action=rd_auth)" option="close" /><!-- Authorize Real-Debrid -->
+		<setting type="action" label="32028" action="RunPlugin(plugin://plugin.video.episodetracker/?action=rd_revoke)" option="close" /><!-- Sign out of Real-Debrid -->
+	</category>
+
+	<category label="32040"><!-- Playback -->
+		<setting id="results.autoplay" type="bool" label="32041" default="false" /><!-- Auto-play best source -->
+		<setting id="results.limit" type="slider" label="32042" default="150" range="25,25,500" option="int" /><!-- Max sources to show -->
+		<setting id="quality.4k" type="bool" label="32043" default="true" />
+		<setting id="quality.1080p" type="bool" label="32044" default="true" />
+		<setting id="quality.720p" type="bool" label="32045" default="true" />
+		<setting id="quality.sd" type="bool" label="32046" default="true" />
+		<setting id="filter.min_seeders" type="slider" label="32047" default="0" range="0,1,50" option="int" />
+		<setting id="rd.keep_cloud" type="bool" label="32050" default="false" /><!-- Keep resolved torrents in RD cloud -->
+		<setting id="scrobble.enabled" type="bool" label="32048" default="true" /><!-- Scrobble to Trakt -->
+		<setting id="scrobble.markwatched" type="bool" label="32049" default="true" subsetting="true" enable="eq(-1,true)" /><!-- Mark watched at end -->
+	</category>
+
+	<category label="32060"><!-- Lists -->
+		<setting id="list.aired_only" type="bool" label="32061" default="true" /><!-- Only show aired episodes -->
+		<setting id="list.sort" type="enum" label="32062" values="Last watched|Recently aired|Alphabetical" default="0" />
+		<setting id="cache.hours" type="slider" label="32063" default="6" range="1,1,48" option="int" /><!-- Source cache (hours) -->
+	</category>
+
+	<category label="32080"><!-- Tools -->
+		<setting type="action" label="32081" action="RunPlugin(plugin://plugin.video.episodetracker/?action=clear_cache)" option="close" /><!-- Clear source cache -->
+		<setting type="action" label="32082" action="RunPlugin(plugin://plugin.video.episodetracker/?action=coco_settings)" option="close" /><!-- Open CocoScrapers settings -->
+		<setting id="debug.enabled" type="bool" label="32083" default="false" /><!-- Verbose logging -->
+	</category>
+</settings>
