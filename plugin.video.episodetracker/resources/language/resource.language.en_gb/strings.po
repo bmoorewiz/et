@@ -150,6 +150,10 @@ msgctxt "#32055"
 msgid "Show only cached sources"
 msgstr ""
 
+msgctxt "#32056"
+msgid "Cache-check results for (minutes)"
+msgstr ""
+
 msgctxt "#32060"
 msgid "Lists"
 msgstr ""

@@ -36,6 +36,7 @@
 		<setting id="playback.max_attempts" type="slider" label="32053" default="4" range="1,1,10" option="int" subsetting="true" enable="eq(-1,true)" />
 		<setting id="sources.check_cache" type="bool" label="32054" default="true" />
 		<setting id="sources.only_cached" type="bool" label="32055" default="false" subsetting="true" enable="eq(-1,true)" />
+		<setting id="rd.cache_check_minutes" type="slider" label="32056" default="20" range="5,5,120" option="int" subsetting="true" enable="eq(-2,true)" />
 		<setting id="scrobble.enabled" type="bool" label="32048" default="true" /><!-- Scrobble to Trakt -->
 		<setting id="scrobble.markwatched" type="bool" label="32049" default="true" subsetting="true" enable="eq(-1,true)" /><!-- Mark watched at end -->
 	</category>

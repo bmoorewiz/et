@@ -1,3 +1,15 @@
+v1.0.7
+- The Real-Debrid account is verified before scraping. An expired or
+  non-premium account now says so immediately instead of failing every
+  source with an unhelpful error.
+- Cache-check answers are stored locally (20 minutes by default,
+  configurable) so moving around a source list does not re-query
+  Real-Debrid and risk its rate limit.
+- Availability is no longer queried at all for an account that cannot
+  resolve anything.
+- Cached sources are labelled [RD+] and uncached ones [RD Download],
+  with cached sorted to the top.
+
 v1.0.6
 - Fixed "Could not resolve a playable link" on every source. Real-Debrid
   only fills in a torrent's download links once its status reaches

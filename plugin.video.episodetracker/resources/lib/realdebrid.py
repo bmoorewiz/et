@@ -15,6 +15,7 @@ import requests
 from requests.adapters import HTTPAdapter
 
 from resources.lib import control
+from resources.lib import cache
 
 REST_BASE = 'https://api.real-debrid.com/rest/1.0/'
 OAUTH_BASE = 'https://api.real-debrid.com/oauth/v2/'
@@ -226,6 +227,39 @@ def account_info():
 	return _get('user')
 
 
+def account_status():
+	"""Return ``(ok, message)`` for the account behind the stored token.
+
+	Worth checking before anything else: an expired or non-premium account
+	fails every resolve with an unhelpful error, and there is no point
+	querying availability for it either. Cached briefly so navigation does
+	not re-query.
+	"""
+	if not authorized():
+		return False, 'Real-Debrid is not authorized'
+	cached = cache.get('rd_account_status')
+	if cached is not None:
+		return bool(cached.get('ok')), cached.get('message', '')
+
+	info = account_info()
+	if not info or not isinstance(info, dict) or 'username' not in info:
+		# don't cache a transient failure
+		return False, ('Real-Debrid did not accept the stored token. '
+					   'Re-authorize under Settings > Accounts.')
+	try:
+		seconds = int(info.get('premium', 0) or 0)
+	except (TypeError, ValueError):
+		seconds = 0
+	if info.get('type') != 'premium' or seconds <= 0:
+		result = (False, 'Real-Debrid account "%s" has no active premium time. '
+						 'Torrents cannot be resolved without it.'
+				  % info.get('username', '?'))
+	else:
+		result = (True, 'premium, %d days left' % (seconds // 86400))
+	cache.set('rd_account_status', {'ok': result[0], 'message': result[1]}, hours=1)
+	return result
+
+
 # ---------------------------------------------------------------------------
 # Torrent operations
 # ---------------------------------------------------------------------------
@@ -253,11 +287,30 @@ def cached_hashes(hashes, batch=40):
 	hashes = [h.lower() for h in hashes if h]
 	if not hashes:
 		return cached, usable
-	for start in range(0, len(hashes), batch):
-		chunk = hashes[start:start + batch]
+
+	# Querying availability for an account that cannot resolve anything is
+	# pointless and just burns rate limit.
+	ok, _message = account_status()
+	if not ok:
+		return cached, usable
+
+	minutes = max(1, control.get_int('rd.cache_check_minutes', 20))
+	pending = []
+	for info_hash in hashes:
+		entry = cache.get('rd_avail_%s' % info_hash)
+		if entry is None:
+			pending.append(info_hash)
+			continue
+		usable = True
+		if entry.get('cached'):
+			cached.add(info_hash)
+
+	for start in range(0, len(pending), batch):
+		chunk = pending[start:start + batch]
 		result = check_cache(chunk)
 		if not isinstance(result, dict):
 			continue
+		_remember(chunk, result, minutes)
 		for info_hash, value in result.items():
 			# a cached torrent maps to a non-empty dict of file variants
 			if isinstance(value, dict) and value:
@@ -269,6 +322,22 @@ def cached_hashes(hashes, batch=40):
 				usable = True
 				cached.add(info_hash.lower())
 	return cached, usable
+
+
+def _remember(chunk, result, minutes):
+	"""Cache the availability answer for each hash in a queried batch.
+
+	Both outcomes are stored, so repeated navigation over the same source
+	list does not re-query Real-Debrid and risk its rate limit.
+	"""
+	hours = minutes / 60.0
+	lowered = {k.lower(): v for k, v in result.items()}
+	for info_hash in chunk:
+		value = lowered.get(info_hash)
+		if isinstance(value, dict):
+			value = value.get('rd') if 'rd' in value else value
+		is_cached = bool(value)
+		cache.set('rd_avail_%s' % info_hash, {'cached': is_cached}, hours=hours)
 
 
 def add_magnet(magnet):

@@ -230,8 +230,8 @@ def _add_source_item(source, entry, cache_known=False):
 	info_line = source.get('info', '')
 	prefix = ''
 	if cache_known:
-		prefix = ('[COLOR lime]+[/COLOR] ' if source.get('rd_cached')
-				  else '[COLOR grey]-[/COLOR] ')
+		prefix = ('[COLOR lime][RD+][/COLOR] ' if source.get('rd_cached')
+				  else '[COLOR grey][RD Download][/COLOR] ')
 	label = '%s[B]%s[/B] | %s | S:%s | %s | [I]%s[/I]' % (
 		prefix, quality, size_gb, seeders, provider,
 		source.get('name', '')[:80])
@@ -283,6 +283,12 @@ def _preflight():
 		return False
 	if not trakt.authorized():
 		control.notify(33006)
+		return False
+	# An expired or non-premium Real-Debrid account fails every single
+	# resolve, so say so up front rather than after four failed attempts.
+	ok, message = realdebrid.account_status()
+	if not ok:
+		control.ok_dialog(message, heading=control.lang(33005))
 		return False
 	return True
 
