@@ -109,9 +109,7 @@ def scrape(entry, progress_cb=None):
 	if coco is None:
 		return None  # signals "module missing" to the caller
 
-	cache_key = 'sources_%s_s%se%s' % (
-		entry.get('show_imdb') or entry.get('show_trakt'),
-		entry.get('season'), entry.get('episode'))
+	cache_key = _cache_key(entry)
 	cached = cache.get(cache_key)
 	if cached is not None:
 		return _filter_and_rank(cached)
@@ -182,6 +180,51 @@ def scrape(entry, progress_cb=None):
 					% (len(providers), data.get('tvshowtitle'),
 					   data.get('season'), data.get('episode')))
 	return _filter_and_rank(unique)
+
+
+def _cache_key(entry):
+	return 'sources_%s_s%se%s' % (
+		entry.get('show_imdb') or entry.get('show_trakt'),
+		entry.get('season'), entry.get('episode'))
+
+
+def cached_sources(entry):
+	"""Return the ranked source list already cached for this episode, if any.
+
+	Used to fall through to the next source on a playback failure without
+	re-scraping.
+	"""
+	items = cache.get(_cache_key(entry))
+	return _filter_and_rank(items) if items else []
+
+
+def annotate_cached(sources):
+	"""Flag which sources Real-Debrid reports as already cached.
+
+	Returns ``(sources, usable)``. Real-Debrid deprecated the cache-check
+	endpoint, so when it gives nothing back every source is left unflagged
+	rather than being wrongly marked uncached.
+	"""
+	if not sources or not control.get_bool('sources.check_cache', True):
+		return sources, False
+	try:
+		from resources.lib import realdebrid
+		hashes = [s.get('hash') for s in sources if s.get('hash')]
+		cached, usable = realdebrid.cached_hashes(hashes)
+	except Exception:
+		control.error('cache check failed')
+		return sources, False
+	if not usable:
+		control.log('Real-Debrid returned no usable cache information; '
+					'listing all sources unflagged')
+		return sources, False
+	for item in sources:
+		item['rd_cached'] = (item.get('hash') or '').lower() in cached
+	if control.get_bool('sources.only_cached', False):
+		sources = [s for s in sources if s.get('rd_cached')]
+	else:
+		sources.sort(key=lambda s: not s.get('rd_cached'))
+	return sources, True
 
 
 def _filter_and_rank(items):

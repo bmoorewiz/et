@@ -206,13 +206,19 @@ def sources_menu(entry):
 		control.end_directory(content='')
 		return
 
+	sources, cache_known = scrapers.annotate_cached(sources)
+	if not sources:
+		control.notify(33045)
+		control.end_directory(content='')
+		return
+
 	for source in sources:
-		_add_source_item(source, entry)
+		_add_source_item(source, entry, cache_known)
 
 	control.end_directory(content='files')
 
 
-def _add_source_item(source, entry):
+def _add_source_item(source, entry, cache_known=False):
 	quality = source.get('quality', 'SD')
 	provider = source.get('provider', '')
 	seeders = source.get('seeders', 0)
@@ -222,8 +228,12 @@ def _add_source_item(source, entry):
 		size = 0
 	size_gb = '%.2f GB' % size if size else '?'
 	info_line = source.get('info', '')
-	label = '[B]%s[/B] | %s | S:%s | %s | [I]%s[/I]' % (
-		quality, size_gb, seeders, provider,
+	prefix = ''
+	if cache_known:
+		prefix = ('[COLOR lime]+[/COLOR] ' if source.get('rd_cached')
+				  else '[COLOR grey]-[/COLOR] ')
+	label = '%s[B]%s[/B] | %s | S:%s | %s | [I]%s[/I]' % (
+		prefix, quality, size_gb, seeders, provider,
 		source.get('name', '')[:80])
 	if info_line:
 		label += ' | %s' % info_line

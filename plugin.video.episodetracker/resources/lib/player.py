@@ -23,23 +23,74 @@ def _magnet_for(source):
 	return url
 
 
+def _resolve_one(source, entry):
+	"""Resolve a single source, returning ``(url, error)``."""
+	return realdebrid.resolve_magnet(
+		_magnet_for(source),
+		source.get('hash', ''),
+		entry.get('season'),
+		entry.get('episode'),
+		entry.get('show_title', ''))
+
+
+def _candidates(source, entry):
+	"""The chosen source, followed by the remaining ranked ones."""
+	queue = [source]
+	if not control.get_bool('playback.autonext', True):
+		return queue
+	try:
+		from resources.lib import scrapers
+		ranked = scrapers.cached_sources(entry) or []
+	except Exception:
+		return queue
+	chosen = (source.get('hash') or source.get('url') or '').lower()
+	seen = {chosen}
+	started = False
+	for item in ranked:
+		key = (item.get('hash') or item.get('url') or '').lower()
+		if key == chosen:
+			started = True
+			continue
+		if not started or key in seen:
+			continue
+		seen.add(key)
+		queue.append(item)
+	return queue
+
+
 def play(source, entry):
-	"""Resolve and play a single source, then hand off to the scrobbler."""
+	"""Resolve and play, falling through to the next ranked source on failure."""
+	attempts = max(1, control.get_int('playback.max_attempts', 4))
+	queue = _candidates(source, entry)[:attempts]
+
 	pd = control.progress_bg
 	pd.create(control.addon_name, control.lang(33013))
+	resolved, error = None, None
 	try:
-		magnet = _magnet_for(source)
-		resolved = realdebrid.resolve_magnet(
-			magnet,
-			source.get('hash', ''),
-			entry.get('season'),
-			entry.get('episode'),
-			entry.get('show_title', ''))
+		for position, candidate in enumerate(queue, 1):
+			pd.update(int((position - 1) * 100 / len(queue)),
+					  control.langf(33043, position, len(queue),
+									candidate.get('quality', '')))
+			resolved, error = _resolve_one(candidate, entry)
+			if resolved:
+				source = candidate
+				break
+			control.log('source %d/%d failed: %s' % (position, len(queue), error))
+			if control.aborted():
+				break
 	finally:
 		pd.close()
 
 	if not resolved:
-		control.notify(33014)
+		# Show why, rather than a generic failure. The underlying reason is the
+		# whole value here, so never let a missing translation swallow it.
+		message = error or control.lang(33014) or 'Could not resolve a playable link.'
+		if len(queue) > 1:
+			wrapped = control.langf(33044, len(queue), message)
+			message = (wrapped if wrapped.strip() and message in wrapped
+					   else '%s (tried %d sources)' % (message, len(queue)))
+		control.ok_dialog(message,
+						  heading=control.lang(33014) or control.addon_name)
 		control.resolve_failed()
 		return
 

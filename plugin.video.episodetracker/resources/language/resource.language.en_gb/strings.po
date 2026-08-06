@@ -130,6 +130,26 @@ msgctxt "#32050"
 msgid "Keep resolved torrents in Real-Debrid cloud"
 msgstr ""
 
+msgctxt "#32051"
+msgid "Real-Debrid resolve timeout (seconds)"
+msgstr ""
+
+msgctxt "#32052"
+msgid "Try the next source if one fails"
+msgstr ""
+
+msgctxt "#32053"
+msgid "Maximum sources to try"
+msgstr ""
+
+msgctxt "#32054"
+msgid "Check Real-Debrid cache before listing"
+msgstr ""
+
+msgctxt "#32055"
+msgid "Show only cached sources"
+msgstr ""
+
 msgctxt "#32060"
 msgid "Lists"
 msgstr ""
@@ -350,4 +370,16 @@ msgstr ""
 
 msgctxt "#33041"
 msgid "This build has no Trakt application credentials, so it cannot start the trakt.tv/activate sign-in. Create a free application at trakt.tv/oauth/applications with redirect uri urn:ietf:wg:oauth:2.0:oob, then paste its Client ID and Secret into Settings. Open Settings now?"
+msgstr ""
+
+msgctxt "#33043"
+msgid "Trying source %d of %d  %s"
+msgstr ""
+
+msgctxt "#33044"
+msgid "Tried %d sources. Last error: %s"
+msgstr ""
+
+msgctxt "#33045"
+msgid "No cached sources found. Turn off \"Show only cached sources\" to see the rest."
 msgstr ""

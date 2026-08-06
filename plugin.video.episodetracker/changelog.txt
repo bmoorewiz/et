@@ -1,3 +1,22 @@
+v1.0.6
+- Fixed "Could not resolve a playable link" on every source. Real-Debrid
+  only fills in a torrent's download links once its status reaches
+  "downloaded", but the add-on read the status once, immediately after
+  adding the magnet, and gave up when links were absent. A new magnet is
+  always still converting at that point, so this failed even for cached
+  torrents. The status is now polled until the torrent is ready, with a
+  configurable timeout (Settings > Playback).
+- Playback failures now explain themselves instead of showing a generic
+  message: not cached, dead torrent, magnet unreadable, flagged as a
+  virus, no video file in the torrent, no file matching the episode, or
+  the unrestrict failing.
+- If a source fails, the next ranked source is tried automatically (up to
+  4 by default, configurable, and can be turned off).
+- Sources can be checked against the Real-Debrid cache before listing and
+  are flagged and sorted accordingly. Real-Debrid has deprecated that
+  endpoint, so when it returns nothing usable all sources are listed
+  unflagged rather than being wrongly hidden.
+
 v1.0.5
 - Fixed scraping always finding no sources. Trakt returns year, tvdb and
   tmdb as numbers, and these were passed to CocoScrapers unchanged. The

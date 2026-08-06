@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-	<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.0.5" provider-name="bmoorewiz">
+	<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.0.6" provider-name="bmoorewiz">
 		<requires>
 			<import addon="xbmc.python" version="3.0.0" />
 			<import addon="script.module.requests" version="2.22.0" />
@@ -21,7 +21,7 @@
 				<icon>resources/icon.png</icon>
 				<fanart>resources/fanart.png</fanart>
 			</assets>
-			<news>v1.0.5 - Fixes scraping returning no sources: numeric values from Trakt were making every candidate release fail the scrapers title check.</news>
+			<news>v1.0.6 - Fixes "could not resolve a playable link" on every source, shows the real reason when a source fails, and tries the next source automatically.</news>
 		</extension>
 	</addon>
 	<addon id="repository.episodetracker" name="Episode Tracker Repository" version="1.0.0" provider-name="bmoorewiz">

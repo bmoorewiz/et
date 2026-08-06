@@ -241,6 +241,36 @@ def check_cache(hashes):
 	return _get('torrents/instantAvailability' + suffix) or {}
 
 
+def cached_hashes(hashes, batch=40):
+	"""Return ``(cached_set, usable)`` for the given info hashes.
+
+	``usable`` reports whether Real-Debrid actually answered with cache
+	information. Real-Debrid deprecated instantAvailability and it now
+	commonly replies with nothing useful, in which case the caller must not
+	treat "not listed" as "not cached" - that would hide every source.
+	"""
+	cached, usable = set(), False
+	hashes = [h.lower() for h in hashes if h]
+	if not hashes:
+		return cached, usable
+	for start in range(0, len(hashes), batch):
+		chunk = hashes[start:start + batch]
+		result = check_cache(chunk)
+		if not isinstance(result, dict):
+			continue
+		for info_hash, value in result.items():
+			# a cached torrent maps to a non-empty dict of file variants
+			if isinstance(value, dict) and value:
+				variants = value.get('rd') if 'rd' in value else value
+				if variants:
+					usable = True
+					cached.add(info_hash.lower())
+			elif isinstance(value, list) and value:
+				usable = True
+				cached.add(info_hash.lower())
+	return cached, usable
+
+
 def add_magnet(magnet):
 	resp = _post('torrents/addMagnet', {'magnet': magnet})
 	return resp.get('id', '') if resp else ''
@@ -290,36 +320,74 @@ def _prune_active():
 # Magnet -> playable link
 # ---------------------------------------------------------------------------
 
+# Terminal Real-Debrid transfer states, mapped to what to tell the user.
+_TERMINAL = {
+	'magnet_error': 'Real-Debrid could not read the magnet',
+	'error': 'Real-Debrid reported a transfer error',
+	'virus': 'Real-Debrid flagged this torrent as containing a virus',
+	'dead': 'Torrent is dead - Real-Debrid found no seeders',
+}
+# States that mean the torrent is not already on Real-Debrid's servers.
+_PENDING = ('queued', 'downloading', 'compressing', 'uploading')
+
+
 def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
-	"""Add a magnet, pick the correct episode file, return a playable URL."""
+	"""Add a magnet and return ``(playable_url, error)``.
+
+	Exactly one of the two is set. Real-Debrid only fills in a torrent's
+	``links`` once its status reaches ``downloaded``; a freshly added magnet
+	passes through magnet_conversion / waiting_files_selection / queued
+	first, so the status has to be polled rather than read once. Cached
+	torrents reach ``downloaded`` in a few seconds; anything still
+	downloading after the timeout is simply not cached.
+	"""
 	_maybe_refresh()
 	with _resolve_semaphore:
 		torrent_id = None
 		try:
 			info_hash = (info_hash or '').lower()
 			_prune_active()
+
 			torrent_id = add_magnet(magnet)
 			if not torrent_id:
-				return None
-			select_files(torrent_id, 'all')
-			info = torrent_info(torrent_id)
-			if not info or not info.get('links') or 'error' in info:
-				delete_torrent(torrent_id)
-				return None
+				return None, 'Real-Debrid refused the magnet (check your account is active)'
 
-			# Wait briefly for the transfer to be recognised as cached/finished.
-			control.sleep(1000)
-			elapsed, finished = 0, False
-			while elapsed <= 4 and not finished:
-				active = active_count()
-				if info_hash and info_hash in active.get('list', []):
+			timeout = max(5, control.get_int('rd.resolve_timeout', 20))
+			deadline = time.time() + timeout
+			info, status, selected_once = None, '', False
+
+			while time.time() < deadline:
+				info = torrent_info(torrent_id)
+				if not info:
 					control.sleep(1000)
-					elapsed += 1
-				else:
-					finished = True
-			if not finished:
-				delete_torrent(torrent_id)
-				return None
+					continue
+				status = info.get('status', '')
+				if status in _TERMINAL:
+					return _fail(torrent_id, _TERMINAL[status])
+				if status == 'waiting_files_selection':
+					select_files(torrent_id, 'all')
+					selected_once = True
+				elif status == 'downloaded' and info.get('links'):
+					break
+				control.sleep(1000)
+			else:
+				status = (info or {}).get('status', status)
+
+			if not info or status != 'downloaded' or not info.get('links'):
+				if status in _PENDING:
+					progress = (info or {}).get('progress', 0)
+					return _fail(torrent_id,
+								 'Not cached on Real-Debrid - it started downloading '
+								 '(%s%%). Pick another source.' % progress)
+				if status == 'magnet_conversion':
+					return _fail(torrent_id,
+								 'Real-Debrid was still converting the magnet after %ss'
+								 % timeout)
+				if not selected_once and status == 'waiting_files_selection':
+					return _fail(torrent_id, 'Real-Debrid never accepted the file selection')
+				return _fail(torrent_id,
+							 'Real-Debrid returned no download links (status: %s)'
+							 % (status or 'unknown'))
 
 			selected = [
 				(idx, f) for idx, f in
@@ -328,8 +396,7 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 			]
 			selected.sort(key=lambda x: x[1].get('bytes', 0), reverse=True)
 			if not selected:
-				delete_torrent(torrent_id)
-				return None
+				return _fail(torrent_id, 'Torrent contains no playable video file')
 
 			index = None
 			if season and episode:
@@ -337,24 +404,40 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 					if _episode_match(season, episode, f['path']):
 						index = idx
 						break
+				if index is None and len(selected) > 1:
+					# a pack that does not actually carry this episode
+					return _fail(torrent_id,
+								 'No file matching S%02dE%02d in this torrent'
+								 % (int(season), int(episode)))
 			if index is None:
-				# fall back to the largest video file
 				index = selected[0][0]
 
-			link = info['links'][index]
-			resolved = unrestrict_link(link)
+			try:
+				link = info['links'][index]
+			except IndexError:
+				return _fail(torrent_id, 'Real-Debrid link list did not match the file list')
 
+			resolved = unrestrict_link(link)
 			if not control.get_bool('rd.keep_cloud', False):
 				delete_torrent(torrent_id)
 
-			if resolved and resolved.lower().endswith('.rar'):
-				return None
-			return resolved
-		except Exception:
+			if not resolved:
+				return None, 'Real-Debrid could not unrestrict the file link'
+			if resolved.lower().endswith('.rar'):
+				return None, 'Real-Debrid returned a .rar archive, which cannot be played'
+			return resolved, None
+		except Exception as exc:
 			control.error('rd resolve_magnet failed')
 			if torrent_id:
 				delete_torrent(torrent_id)
-			return None
+			return None, 'Unexpected Real-Debrid error: %s' % exc
+
+
+def _fail(torrent_id, reason):
+	control.log('Real-Debrid resolve failed: %s' % reason)
+	if torrent_id and not control.get_bool('rd.keep_cloud', False):
+		delete_torrent(torrent_id)
+	return None, reason
 
 
 def _episode_match(season, episode, path):
