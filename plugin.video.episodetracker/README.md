@@ -54,17 +54,27 @@ application registration needed. Go to **Settings → Accounts → Authorize
 Real-Debrid**, open the shown URL, and enter the code.
 
 ### Trakt.tv
-Trakt's device authentication requires your own free Trakt application:
+Signing in works exactly like Real-Debrid: **Settings → Accounts → Authorize
+Trakt** shows a code, you enter it at <https://trakt.tv/activate>, and that's
+it. Nothing to configure.
 
-1. Go to <https://trakt.tv/oauth/applications> and create a new application.
+That requires the build to carry Trakt application credentials. Unlike
+Real-Debrid — which publishes an anonymous open-source client id
+(`X245A4XAIBGVM`) that provisions per-user credentials — Trakt's device
+endpoints always require an application's id and secret, so they have to be
+baked into the add-on.
+
+If **Authorize Trakt** tells you the build has no credentials, add them once:
+
+1. <https://trakt.tv/oauth/applications> → **New Application**.
 2. Set the **Redirect URI** to `urn:ietf:wg:oauth:2.0:oob`.
-3. Copy the **Client ID** and **Client Secret** into
-   **Settings → Accounts → Trakt app Client ID / Client Secret**.
-4. Use **Authorize Trakt**, open the shown URL, and enter the code.
+3. Either paste the **Client ID** / **Client Secret** into
+   `DEFAULT_CLIENT_ID` / `DEFAULT_CLIENT_SECRET` at the top of
+   `resources/lib/trakt.py` — every install then just activates with a code —
+   or, for a one-off box, into **Settings → Accounts**.
 
-(If you fork this add-on for personal use you can hard-code your own
-credentials in `resources/lib/trakt.py` via `DEFAULT_CLIENT_ID` /
-`DEFAULT_CLIENT_SECRET` to skip step 3.)
+A Trakt client secret carries no user data and is inherently public in a
+distributed add-on; it only identifies the application.
 
 ## Usage
 

@@ -1,3 +1,12 @@
+v1.0.3
+- Trakt sign-in is the trakt.tv/activate device flow, the same as
+  Real-Debrid: the add-on shows a code and you enter it on the website.
+  Application credentials are now baked into the build rather than being
+  per-install settings, so there is nothing to configure. The Settings
+  fields remain as an override.
+- Clearer prompt when a build carries no Trakt credentials, offering to
+  open Settings instead of showing a hardcoded English message.
+
 v1.0.2
 - Fixed the source/update cache silently doing nothing when the add-on
   profile directory did not exist yet. The cache now creates it on demand.

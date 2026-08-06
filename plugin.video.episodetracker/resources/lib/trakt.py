@@ -24,10 +24,28 @@ DEVICE_CODE_URL = API_BASE + '/oauth/device/code'
 DEVICE_TOKEN_URL = API_BASE + '/oauth/device/token'
 TOKEN_URL = API_BASE + '/oauth/token'
 REDIRECT = 'urn:ietf:wg:oauth:2.0:oob'
+ACTIVATE_URL = 'https://trakt.tv/activate'
 
-# Optional built-in application credentials. Leave blank to require the user
-# to paste their own Trakt application id/secret in the addon settings
-# (create one at https://trakt.tv/oauth/applications).
+# ---------------------------------------------------------------------------
+# Built-in Trakt application credentials.
+#
+# Sign-in uses Trakt's device flow: the add-on shows a code, the user enters
+# it at trakt.tv/activate, done - exactly like Real-Debrid, with nothing to
+# configure. The one difference is that Trakt has no anonymous public client
+# (Real-Debrid publishes the open-source client id X245A4XAIBGVM, which
+# provisions per-user credentials); Trakt's device endpoints always require an
+# application's id and secret. So they are baked in here, which is what other
+# Kodi add-ons do too.
+#
+# Fill these in ONCE and every install just activates with a code:
+#   1. https://trakt.tv/oauth/applications -> New Application
+#   2. Redirect uri: urn:ietf:wg:oauth:2.0:oob
+#   3. Paste the Client ID and Client Secret below.
+#
+# A Trakt client secret carries no user data and is inherently public in a
+# distributed add-on - it only identifies the application. Leaving these blank
+# falls back to per-user credentials entered in Settings > Accounts.
+# ---------------------------------------------------------------------------
 DEFAULT_CLIENT_ID = ''
 DEFAULT_CLIENT_SECRET = ''
 
@@ -68,11 +86,8 @@ def _headers(with_auth=True):
 def authenticate():
 	"""Run the Trakt device-code flow, blocking until authorized or aborted."""
 	if not has_credentials():
-		control.ok_dialog(
-			'Enter your Trakt application Client ID and Secret in Settings first.\n'
-			'Create an application at https://trakt.tv/oauth/applications '
-			'(redirect uri: urn:ietf:wg:oauth:2.0:oob).',
-			heading=control.lang(33004))
+		if control.yesno_dialog(33041, heading=control.lang(33004)):
+			control.open_settings()
 		return False
 	try:
 		resp = requests.post(DEVICE_CODE_URL, json={'client_id': client_id()},
@@ -86,7 +101,7 @@ def authenticate():
 
 	device_code = data['device_code']
 	user_code = data['user_code']
-	verify_url = data.get('verification_url', 'https://trakt.tv/activate')
+	verify_url = data.get('verification_url') or ACTIVATE_URL
 	interval = int(data.get('interval', 5))
 	expires_in = int(data.get('expires_in', 600))
 
