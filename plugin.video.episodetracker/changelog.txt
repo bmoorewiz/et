@@ -1,3 +1,20 @@
+v1.1.2
+- Fixed the misleading "Real-Debrid refused the magnet (check your
+  account is active)" message. Adding a magnet discarded Real-Debrid's
+  actual error and substituted a guess, which was wrong whenever the
+  account was fine. Real-Debrid's own error is now reported, mapped
+  through its official error_code table, with the code included.
+- Recovers from two failures instead of reporting them:
+    * "Torrent already active" (error 33) now reuses the transfer already
+      in your account rather than failing. This happens as soon as you
+      retry a source you have tried before.
+    * "Too many active downloads" (error 21) now frees stalled transfer
+      slots and retries once.
+- Freeing transfer slots clears every stalled transfer when blocked,
+  rather than only the single oldest one.
+- A failed unrestrict reports Real-Debrid's reason too, instead of a
+  generic "could not unrestrict".
+
 v1.1.1
 - The point at which something is marked watched on Trakt is now a
   setting, separately for episodes and movies. It was fixed at 80%, which

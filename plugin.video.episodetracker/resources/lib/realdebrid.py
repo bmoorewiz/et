@@ -340,9 +340,96 @@ def _remember(chunk, result, minutes):
 		cache.set('rd_avail_%s' % info_hash, {'cached': is_cached}, hours=hours)
 
 
-def add_magnet(magnet):
+# Official Real-Debrid error_code table (api.real-debrid.com).
+RD_ERRORS = {
+	-1: 'Internal error', 1: 'Missing parameter', 2: 'Bad parameter value',
+	3: 'Unknown method', 4: 'Method not allowed', 5: 'Slow down',
+	6: 'Resource unreachable', 7: 'Resource not found', 8: 'Bad token',
+	9: 'Permission denied', 10: 'Two-Factor authentication needed',
+	11: 'Two-Factor authentication pending', 12: 'Invalid login',
+	13: 'Invalid password', 14: 'Account locked', 15: 'Account not activated',
+	16: 'Unsupported hoster', 17: 'Hoster in maintenance',
+	18: 'Hoster limit reached', 19: 'Hoster temporarily unavailable',
+	20: 'Hoster not available for free users', 21: 'Too many active downloads',
+	22: 'IP address not allowed', 23: 'Traffic exhausted',
+	24: 'File unavailable', 25: 'Service unavailable', 26: 'Upload too big',
+	27: 'Upload error', 28: 'File not allowed', 29: 'Torrent too big',
+	30: 'Torrent file invalid', 31: 'Action already done',
+	32: 'Image resolution error', 33: 'Torrent already active',
+	34: 'Too many requests', 35: 'Infringing file', 36: 'Fair usage limit',
+	37: 'Disabled endpoint',
+}
+# Advice worth adding to the bare Real-Debrid wording.
+_ERROR_HINT = {
+	9: 'your Real-Debrid account may be locked or not premium',
+	21: 'delete some transfers in your Real-Debrid account',
+	22: 'Real-Debrid saw a different IP than the one your account is tied to',
+	23: 'your Real-Debrid traffic allowance is used up',
+	35: 'Real-Debrid blocks this particular torrent',
+	36: 'you have hit Real-Debrid\'s fair usage limit',
+}
+
+
+def error_text(data):
+	"""Human-readable text for a Real-Debrid error payload, or '' if fine."""
+	if not isinstance(data, dict):
+		return ''
+	code = data.get('error_code')
+	message = data.get('error')
+	if code is None and not message:
+		return ''
+	text = RD_ERRORS.get(code) or (str(message) if message else 'Unknown error')
+	hint = _ERROR_HINT.get(code)
+	if hint:
+		text = '%s - %s' % (text, hint)
+	if code is not None:
+		text = '%s (Real-Debrid error %s)' % (text, code)
+	return text
+
+
+def find_torrent_by_hash(info_hash):
+	"""Return the id of a torrent already in the account with this hash."""
+	if not info_hash:
+		return ''
+	try:
+		for torrent in (_get('torrents?limit=100') or []):
+			if (torrent.get('hash') or '').lower() == info_hash.lower():
+				return torrent.get('id', '')
+	except Exception:
+		control.error('rd torrent lookup failed')
+	return ''
+
+
+def add_magnet(magnet, info_hash=''):
+	"""Add a magnet. Returns ``(torrent_id, error)``.
+
+	Real-Debrid's own error is reported rather than a guess. Two cases are
+	recovered from rather than failed: a torrent already in the account
+	(error 33) is reused, and hitting the active-transfer limit (error 21)
+	is retried once after pruning.
+	"""
 	resp = _post('torrents/addMagnet', {'magnet': magnet})
-	return resp.get('id', '') if resp else ''
+	if isinstance(resp, dict) and resp.get('id'):
+		return resp['id'], None
+	if resp is None:
+		return '', 'No response from Real-Debrid (network or token problem)'
+
+	code = resp.get('error_code') if isinstance(resp, dict) else None
+
+	if code == 33:  # already in the account - use the existing transfer
+		existing = find_torrent_by_hash(info_hash)
+		if existing:
+			control.log('reusing torrent already in the Real-Debrid account')
+			return existing, None
+
+	if code == 21:  # too many active transfers - free some and retry once
+		if _prune_active(force=True):
+			retry = _post('torrents/addMagnet', {'magnet': magnet})
+			if isinstance(retry, dict) and retry.get('id'):
+				return retry['id'], None
+			resp = retry if isinstance(retry, dict) else resp
+
+	return '', error_text(resp) or 'Real-Debrid rejected the magnet'
 
 
 def select_files(torrent_id, file_ids='all'):
@@ -357,11 +444,19 @@ def active_count():
 	return _get('torrents/activeCount') or {'nb': 0, 'list': []}
 
 
-def unrestrict_link(link):
+def unrestrict(link):
+	"""Turn a Real-Debrid file link into ``(direct_url, error)``."""
 	resp = _post('unrestrict/link', {'link': link})
-	if resp and 'download' in resp:
-		return resp['download']
-	return None
+	if isinstance(resp, dict) and resp.get('download'):
+		return resp['download'], None
+	detail = error_text(resp) or 'Real-Debrid returned no download link'
+	control.log('Real-Debrid unrestrict failed: %s' % detail)
+	return None, detail
+
+
+def unrestrict_link(link):
+	"""Backwards-compatible wrapper returning just the URL."""
+	return unrestrict(link)[0]
 
 
 def delete_torrent(torrent_id):
@@ -370,19 +465,38 @@ def delete_torrent(torrent_id):
 	_delete('torrents/delete/%s' % torrent_id)
 
 
-def _prune_active():
-	"""Real-Debrid caps concurrent transfers; drop the oldest if at the limit."""
+def _prune_active(force=False):
+	"""Free up Real-Debrid transfer slots. Returns True if anything was removed.
+
+	Real-Debrid caps concurrent transfers and refuses new magnets with error
+	21 once the cap is reached. Removing a single transfer is not always
+	enough, so clear every stalled one when we are actually blocked.
+	"""
+	removed = False
 	try:
 		active = active_count()
-		if int(active.get('nb', 0)) >= 5:
-			stale = active.get('list', [])
-			if stale:
-				torrents = _get('torrents') or []
-				match = [t for t in torrents if t.get('hash') == stale[0]]
-				if match:
-					delete_torrent(match[0]['id'])
+		count = int(active.get('nb', 0) or 0)
+		limit = int(active.get('limit', 0) or 0)
+		stale = active.get('list', []) or []
+		if not force and not (limit and count >= limit) and count < 5:
+			return False
+		if not stale:
+			return False
+		torrents = _get('torrents?limit=100') or []
+		by_hash = {(t.get('hash') or '').lower(): t.get('id')
+				   for t in torrents if t.get('id')}
+		# oldest first; when forced, clear them all rather than just one
+		targets = stale if force else stale[:1]
+		for info_hash in targets:
+			torrent_id = by_hash.get((info_hash or '').lower())
+			if torrent_id:
+				delete_torrent(torrent_id)
+				removed = True
+		if removed:
+			control.log('freed %d Real-Debrid transfer slot(s)' % len(targets))
 	except Exception:
 		control.error('rd prune failed')
+	return removed
 
 
 # ---------------------------------------------------------------------------
@@ -417,9 +531,9 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 			info_hash = (info_hash or '').lower()
 			_prune_active()
 
-			torrent_id = add_magnet(magnet)
+			torrent_id, add_error = add_magnet(magnet, info_hash)
 			if not torrent_id:
-				return None, 'Real-Debrid refused the magnet (check your account is active)'
+				return None, add_error or 'Real-Debrid rejected the magnet'
 
 			timeout = max(5, control.get_int('rd.resolve_timeout', 20))
 			deadline = time.time() + timeout
@@ -486,12 +600,12 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 			except IndexError:
 				return _fail(torrent_id, 'Real-Debrid link list did not match the file list')
 
-			resolved = unrestrict_link(link)
+			resolved, unrestrict_error = unrestrict(link)
 			if not control.get_bool('rd.keep_cloud', False):
 				delete_torrent(torrent_id)
 
 			if not resolved:
-				return None, 'Real-Debrid could not unrestrict the file link'
+				return None, unrestrict_error or 'Real-Debrid could not unrestrict the file link'
 			if resolved.lower().endswith('.rar'):
 				return None, 'Real-Debrid returned a .rar archive, which cannot be played'
 			return resolved, None
