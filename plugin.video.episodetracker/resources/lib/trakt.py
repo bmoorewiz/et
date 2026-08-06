@@ -321,7 +321,15 @@ def next_episodes(refresh=False):
 	for t in threads:
 		t.join()
 
-	cache.set(cache_key, results, hours=max(1, control.get_int('cache.hours', 6)))
+	# A full result is cached normally. An empty result is cached only
+	# briefly: it is usually a genuinely caught-up account, but it can also
+	# be every progress call failing at once, and we do not want a transient
+	# failure to hide the list for the whole cache window.
+	if results:
+		cache.set(cache_key, results,
+				  hours=max(1, control.get_int('cache.hours', 6)))
+	else:
+		cache.set(cache_key, results, hours=0.25)
 	return _post_filter(results)
 
 

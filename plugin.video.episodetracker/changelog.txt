@@ -1,3 +1,16 @@
+v1.1.3
+- Next Episodes: an empty result is now cached for only 15 minutes
+  instead of the full cache window. A genuinely caught-up account still
+  isn\'t re-queried on every visit, but if every progress call fails at
+  once the list recovers quickly instead of staying empty for hours.
+- Scrobbling now binds to the file that is actually playing. Kodi keeps
+  "is playing" true across back-to-back videos, so a monitor could
+  otherwise attribute the next video\'s progress to the previous item and
+  mark the wrong thing watched. It now stops as soon as the playing file
+  changes.
+- Internal: the Next Episodes list now builds its labels and metadata
+  through the same helpers as the player, so the two cannot drift apart.
+
 v1.1.2
 - Fixed the misleading "Real-Debrid refused the magnet (check your
   account is active)" message. Adding a magnet discarded Real-Debrid's

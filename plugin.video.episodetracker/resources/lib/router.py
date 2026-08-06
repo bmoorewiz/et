@@ -153,26 +153,10 @@ def next_episodes_menu(refresh=False):
 
 
 def _add_episode_item(entry, autoplay):
-	try:
-		season = int(entry.get('season') or 0)
-		episode = int(entry.get('episode') or 0)
-	except (ValueError, TypeError):
-		season, episode = 0, 0
-	label = '%s - %dx%02d - %s' % (
-		entry.get('show_title', ''), season, episode,
-		entry.get('ep_title', ''))
-
+	# Reuse the player's label/info builders so the two never drift apart.
+	label = player.display_label(entry)
 	encoded = _encode(entry)
-	info = {
-		'mediatype': 'episode',
-		'tvshowtitle': entry.get('show_title', ''),
-		'title': entry.get('ep_title', ''),
-		'season': season,
-		'episode': episode,
-		'plot': entry.get('plot', ''),
-		'aired': (entry.get('first_aired') or '')[:10],
-		'premiered': (entry.get('first_aired') or '')[:10],
-	}
+	info = player.media_info(entry)
 	context = [
 		(control.lang(33022),
 		 'RunPlugin(%s)' % control.build_url(

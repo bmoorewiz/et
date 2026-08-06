@@ -168,11 +168,24 @@ def play(source, entry):
 
 	# Scrobble in the background so we don't block the resolved-url handoff.
 	if control.get_bool('scrobble.enabled', True) and trakt.authorized():
-		threading.Thread(target=_scrobble_monitor, args=(entry,)).start()
+		threading.Thread(target=_scrobble_monitor,
+						 args=(entry, resolved)).start()
 
 
-def _scrobble_monitor(entry):
-	"""Watch playback and send Trakt scrobble start/stop events."""
+def _playing_file(player):
+	try:
+		return player.getPlayingFile() if player.isPlaying() else None
+	except Exception:
+		return None
+
+
+def _scrobble_monitor(entry, resolved_url=None):
+	"""Watch playback and send Trakt scrobble start/stop events.
+
+	The monitor binds to the file that is actually playing. Kodi keeps
+	isPlaying() true across consecutive items, so without this a monitor
+	would keep attributing a *different* video's progress to this entry.
+	"""
 	player = xbmc.Player()
 	monitor = xbmc.Monitor()
 
@@ -185,10 +198,16 @@ def _scrobble_monitor(entry):
 	if not player.isPlaying():
 		return
 
+	# Remember which file this monitor owns; stop when it changes or ends.
+	my_file = _playing_file(player)
+
 	started = False
 	last_percent = 0.0
 	try:
 		while player.isPlaying():
+			current_file = _playing_file(player)
+			if my_file and current_file and current_file != my_file:
+				break  # a different video started - this one has ended
 			try:
 				total = player.getTotalTime()
 				current = player.getTime()
