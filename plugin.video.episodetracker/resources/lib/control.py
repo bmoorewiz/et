@@ -226,9 +226,33 @@ def resolve_failed():
 	xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
 
 
+import re as _re
+
+# Real-Debrid takes its token as a query parameter, so any network error puts
+# the full URL - token included - into the traceback. Kodi logs get shared in
+# forum posts and bug reports, so scrub anything credential-shaped on the way
+# out rather than trusting every call site to be careful.
+_SECRET_PATTERNS = (
+	_re.compile(r'((?:auth_token|access_token|refresh_token|token|client_secret'
+				r'|secret|password|api_key|apikey|code)=)[^&\s\'"]+', _re.I),
+	_re.compile(r'((?:Bearer|Authorization:\s*Bearer)\s+)[\w.\-]+', _re.I),
+)
+
+
+def redact(text):
+	"""Mask credential-shaped values in a string bound for the log."""
+	try:
+		text = str(text)
+		for pattern in _SECRET_PATTERNS:
+			text = pattern.sub(r'\1<redacted>', text)
+		return text
+	except Exception:
+		return '<unloggable>'
+
+
 def log(message, level=xbmc.LOGINFO):
 	try:
-		xbmc.log('[%s] %s' % (addon_id, message), level)
+		xbmc.log('[%s] %s' % (addon_id, redact(message)), level)
 	except Exception:
 		pass
 
@@ -240,4 +264,6 @@ def debug(message):
 
 def error(message=''):
 	import traceback
-	log('%s\n%s' % (message, traceback.format_exc()), xbmc.LOGERROR)
+	# log() redacts, but do it here too so the traceback is never assembled
+	# into an unredacted string that some other handler might pick up.
+	log(redact('%s\n%s' % (message, traceback.format_exc())), xbmc.LOGERROR)

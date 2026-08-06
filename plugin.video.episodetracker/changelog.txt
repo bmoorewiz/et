@@ -1,3 +1,11 @@
+v1.0.8
+- Security fix: credentials could end up in the Kodi log. Real-Debrid
+  takes its token as a URL query parameter, so any network error wrote
+  the full URL - token included - into the log via the traceback. Kodi
+  logs are routinely shared in forum posts and bug reports. Tokens,
+  secrets, refresh tokens and authorization headers are now redacted
+  before anything is written to the log.
+
 v1.0.7
 - The Real-Debrid account is verified before scraping. An expired or
   non-premium account now says so immediately instead of failing every

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.0.7" provider-name="bmoorewiz">
+<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.0.8" provider-name="bmoorewiz">
 	<requires>
 		<import addon="xbmc.python" version="3.0.0" />
 		<import addon="script.module.requests" version="2.22.0" />
@@ -20,6 +20,6 @@
 			<icon>resources/icon.png</icon>
 			<fanart>resources/fanart.png</fanart>
 		</assets>
-		<news>v1.0.7 - Checks the Real-Debrid account up front, caches cache-check results to respect rate limits, and labels sources [RD+] or [RD Download].</news>
+		<news>v1.0.8 - Security fix: Real-Debrid and Trakt tokens could appear in the Kodi log via error tracebacks. They are now redacted.</news>
 	</extension>
 </addon>
