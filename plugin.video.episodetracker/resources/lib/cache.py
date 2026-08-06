@@ -8,6 +8,7 @@ not re-scrape or re-query on every navigation.
 import os
 import time
 import json
+import random
 import hashlib
 from sqlite3 import dbapi2 as database
 
@@ -66,6 +67,13 @@ def set(key, value, hours=6):
 			'INSERT OR REPLACE INTO cache (key, value, expires) VALUES (?, ?, ?)',
 			(key, json.dumps(value), expires),
 		)
+		# Occasionally sweep expired rows so the table cannot grow without
+		# bound - the short-lived per-hash availability keys would otherwise
+		# leave one dead row per source browsed, forever. Sampled so it is not
+		# a full-table scan on every write.
+		if random.random() < 0.05:
+			conn.execute('DELETE FROM cache WHERE expires > 0 AND expires < ?',
+						 (int(time.time()),))
 		conn.commit()
 		conn.close()
 	except Exception:
