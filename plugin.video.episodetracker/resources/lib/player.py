@@ -53,6 +53,18 @@ def media_info(entry):
 	}
 
 
+def watched_threshold(entry):
+	"""Percentage of playback after which an item counts as watched.
+
+	Trakt's own /scrobble/stop marks an item watched at 80% server-side, so
+	setting this above 80 does not stop Trakt doing that - it only controls
+	whether this add-on also posts it to /sync/history.
+	"""
+	key = ('scrobble.threshold.movie' if is_movie(entry)
+		   else 'scrobble.threshold.episode')
+	return min(100, max(1, control.get_int(key, 80)))
+
+
 def _magnet_for(source):
 	url = source.get('url', '')
 	if url.startswith('magnet:'):
@@ -187,7 +199,9 @@ def _scrobble_monitor(entry):
 					started = True
 			except Exception:
 				pass
-			if monitor.waitForAbort(10):
+			# Sample often enough that the final reading is close to where
+			# playback actually stopped - that value decides "watched".
+			if monitor.waitForAbort(5):
 				break
 	except Exception:
 		control.error('scrobble monitor failed')
@@ -195,9 +209,15 @@ def _scrobble_monitor(entry):
 	# Playback ended - send a stop event and optionally mark watched.
 	try:
 		trakt.scrobble(entry, 'stop', last_percent)
-		if last_percent >= 80 and control.get_bool('scrobble.markwatched', True):
-			# Trakt marks it watched automatically on a stop above ~80%, but we
-			# also add to history explicitly so the next-up list advances.
+		threshold = watched_threshold(entry)
+		if last_percent >= threshold and control.get_bool('scrobble.markwatched', True):
+			# Trakt already marks it watched on a stop above 80%, but we also
+			# add to history explicitly so the next-up list advances at once.
+			control.log('marking watched at %.1f%% (threshold %d%%): %s'
+						% (last_percent, threshold, display_label(entry)))
 			trakt.add_to_history(entry)
+		else:
+			control.log('not marking watched, reached %.1f%% of %d%%: %s'
+						% (last_percent, threshold, display_label(entry)))
 	except Exception:
 		control.error('scrobble stop failed')

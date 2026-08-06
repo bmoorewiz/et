@@ -88,6 +88,19 @@ distributed add-on; it only identifies the application.
 
 Everything you play is scrobbled to Trakt and marked watched when it
 finishes, whether you got to it through Next Episodes or search.
+
+### When something counts as watched
+
+By default, at **80%** of the runtime — separately configurable for episodes
+and movies under **Settings → Playback**.
+
+Note that two things mark an item watched, and only one of them is yours to
+change: Trakt's own `/scrobble/stop` marks it watched server-side at 80%
+regardless of this setting. The add-on additionally posts to `/sync/history`
+once your threshold is reached, so the Next Episodes list advances straight
+away. Raising the threshold above 80 therefore won't stop Trakt marking it at
+80; lowering it below 80 will mark it earlier than Trakt would. Turning off
+**Mark watched at end of playback** disables only the add-on's post.
 - Playback scrobbles to Trakt automatically and marks the episode watched at
   the end, so the show's next episode appears on your next visit.
 - Right-click an episode for **Mark as watched on Trakt** and **Refresh**.

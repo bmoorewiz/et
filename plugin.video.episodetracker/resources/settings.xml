@@ -39,6 +39,8 @@
 		<setting id="rd.cache_check_minutes" type="slider" label="32056" default="20" range="5,5,120" option="int" subsetting="true" enable="eq(-2,true)" />
 		<setting id="scrobble.enabled" type="bool" label="32048" default="true" /><!-- Scrobble to Trakt -->
 		<setting id="scrobble.markwatched" type="bool" label="32049" default="true" subsetting="true" enable="eq(-1,true)" /><!-- Mark watched at end -->
+		<setting id="scrobble.threshold.episode" type="slider" label="32057" default="80" range="10,5,100" option="int" subsetting="true" enable="eq(-1,true)" />
+		<setting id="scrobble.threshold.movie" type="slider" label="32058" default="80" range="10,5,100" option="int" subsetting="true" enable="eq(-2,true)" />
 	</category>
 
 	<category label="32060"><!-- Lists -->

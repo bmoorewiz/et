@@ -154,6 +154,14 @@ msgctxt "#32056"
 msgid "Cache-check results for (minutes)"
 msgstr ""
 
+msgctxt "#32057"
+msgid "Mark episodes watched at (%)"
+msgstr ""
+
+msgctxt "#32058"
+msgid "Mark movies watched at (%)"
+msgstr ""
+
 msgctxt "#32060"
 msgid "Lists"
 msgstr ""

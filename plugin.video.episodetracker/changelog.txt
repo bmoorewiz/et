@@ -1,3 +1,18 @@
+v1.1.1
+- The point at which something is marked watched on Trakt is now a
+  setting, separately for episodes and movies. It was fixed at 80%, which
+  is still the default, and the value is clamped to 1-100.
+- Playback progress is now sampled every 5 seconds instead of 10, so the
+  final reading is closer to where playback actually stopped - that value
+  is what decides whether something counts as watched.
+- The decision is logged either way, with the percentage reached and the
+  threshold, so it is clear why something was or was not marked.
+
+  Note: Trakt's own /scrobble/stop marks an item watched server-side at
+  80% regardless of this setting. The threshold controls the add-on's
+  additional /sync/history post, which is what makes the Next Episodes
+  list advance immediately.
+
 v1.1.0
 - New: Search TV Shows. Search Trakt, pick a show, then a season, then an
   episode, and play it like any next-up episode.
