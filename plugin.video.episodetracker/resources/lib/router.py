@@ -326,6 +326,22 @@ def sources_menu(entry):
 	control.end_directory(content='files')
 
 
+# Per-quality label colour (Kodi AARRGGBB hex). Higher tiers stand out.
+_QUALITY_COLOR = {
+	'4K': 'FFFFD700',    # gold
+	'1080p': 'FF32CD32',  # lime green
+	'720p': 'FF1E90FF',   # dodger blue
+	'SD': 'FFB0B0B0',     # grey
+	'SCR': 'FFFF8C00',    # dark orange
+	'CAM': 'FFFF4444',    # red
+}
+_DEFAULT_QUALITY_COLOR = 'FFB0B0B0'
+
+
+def _color(text, hex_color):
+	return '[COLOR %s]%s[/COLOR]' % (hex_color, text)
+
+
 def _add_source_item(source, entry, cache_known=False):
 	quality = source.get('quality', 'SD')
 	provider = source.get('provider', '')
@@ -340,8 +356,11 @@ def _add_source_item(source, entry, cache_known=False):
 	if cache_known:
 		prefix = ('[COLOR lime][RD+][/COLOR] ' if source.get('rd_cached')
 				  else '[COLOR grey][RD Download][/COLOR] ')
-	label = '%s[B]%s[/B] | %s | S:%s | %s | [I]%s[/I]' % (
-		prefix, quality, size_gb, seeders, provider,
+	# Colour the quality badge by tier so 4K/1080p/720p are scannable at a glance.
+	quality_badge = _color('[B]%s[/B]' % quality,
+						   _QUALITY_COLOR.get(quality, _DEFAULT_QUALITY_COLOR))
+	label = '%s%s | %s | S:%s | %s | [I]%s[/I]' % (
+		prefix, quality_badge, size_gb, seeders, provider,
 		source.get('name', '')[:80])
 	if info_line:
 		label += ' | %s' % info_line

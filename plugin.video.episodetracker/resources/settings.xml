@@ -33,7 +33,7 @@
 		<setting id="rd.keep_cloud" type="bool" label="32050" default="false" /><!-- Keep resolved torrents in RD cloud -->
 		<setting id="rd.resolve_timeout" type="slider" label="32051" default="20" range="5,5,120" option="int" />
 		<setting id="playback.autonext" type="bool" label="32052" default="true" />
-		<setting id="playback.max_attempts" type="slider" label="32053" default="4" range="1,1,10" option="int" subsetting="true" enable="eq(-1,true)" />
+		<setting id="playback.max_attempts" type="slider" label="32053" default="25" range="1,1,50" option="int" subsetting="true" enable="eq(-1,true)" />
 		<setting id="sources.check_cache" type="bool" label="32054" default="true" />
 		<setting id="sources.only_cached" type="bool" label="32055" default="false" subsetting="true" enable="eq(-1,true)" />
 		<setting id="rd.cache_check_minutes" type="slider" label="32056" default="20" range="5,5,120" option="int" subsetting="true" enable="eq(-2,true)" />

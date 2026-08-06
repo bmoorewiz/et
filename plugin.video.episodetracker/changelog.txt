@@ -1,3 +1,12 @@
+v1.2.0
+- Scraped sources now colour the quality badge by tier so the list is
+  scannable at a glance: 4K gold, 1080p green, 720p blue, SD grey,
+  screener orange, CAM red.
+- The number of sources tried automatically when one fails to resolve is
+  now up to 25 (was 4), and the setting range goes to 50. New installs
+  default to 25; an existing install keeps its saved value, so raise it
+  under Settings > Playback > Maximum sources to try.
+
 v1.1.4
 - The internal cache now sweeps expired rows instead of leaving them in
   place. Short-lived per-source Real-Debrid availability entries used to

@@ -119,7 +119,7 @@ def _candidates(source, entry):
 
 def play(source, entry):
 	"""Resolve and play, falling through to the next ranked source on failure."""
-	attempts = max(1, control.get_int('playback.max_attempts', 4))
+	attempts = max(1, control.get_int('playback.max_attempts', 25))
 	queue = _candidates(source, entry)[:attempts]
 
 	pd = control.progress_bg
