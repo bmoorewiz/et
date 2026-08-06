@@ -1,6 +1,6 @@
 # Episode Tracker — Kodi add-on & repository
 
-A Kodi add-on that tracks and plays your **Trakt.tv "next up" episodes**,
+A Kodi add-on that tracks and plays your **Trakt.tv "next up" episodes**, and searches TV shows and movies,
 scraping sources with **CocoScrapers** and resolving them through
 **Real-Debrid**.
 

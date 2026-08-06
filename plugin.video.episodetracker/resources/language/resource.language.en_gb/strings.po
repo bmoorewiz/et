@@ -387,3 +387,27 @@ msgstr ""
 msgctxt "#33045"
 msgid "No cached sources found. Turn off \"Show only cached sources\" to see the rest."
 msgstr ""
+
+msgctxt "#33050"
+msgid "Search TV Shows"
+msgstr ""
+
+msgctxt "#33051"
+msgid "Search Movies"
+msgstr ""
+
+msgctxt "#33052"
+msgid "Searching for \"%s\"..."
+msgstr ""
+
+msgctxt "#33053"
+msgid "Nothing found for \"%s\"."
+msgstr ""
+
+msgctxt "#33054"
+msgid "Trakt returned nothing for that selection."
+msgstr ""
+
+msgctxt "#33055"
+msgid "Season %s  (%s episodes)"
+msgstr ""

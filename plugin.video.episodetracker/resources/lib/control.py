@@ -142,6 +142,19 @@ def yesno_dialog(message, heading=None):
 	return dialog.yesno(heading, message)
 
 
+def keyboard(heading=None, default=''):
+	"""Prompt for text. Returns the entered string, or '' if cancelled."""
+	if heading is None:
+		heading = addon_name
+	if isinstance(heading, int):
+		heading = lang(heading)
+	try:
+		text = dialog.input(heading, default, type=xbmcgui.INPUT_ALPHANUM)
+		return (text or '').strip()
+	except Exception:
+		return ''
+
+
 def select_dialog(options, heading=None):
 	if heading is None:
 		heading = addon_name
@@ -169,6 +182,8 @@ def add_directory_item(label, params, is_folder=True, art=None, info=None,
 		art['fanart'] = addon_fanart
 	item.setArt(art)
 	if info:
+		# Kodi rejects None values in setInfo, so drop empties first.
+		info = {k: v for k, v in info.items() if v not in (None, '')}
 		try:
 			# Kodi 20+ (InfoTagVideo) with graceful fallback to setInfo
 			tag = item.getVideoInfoTag()

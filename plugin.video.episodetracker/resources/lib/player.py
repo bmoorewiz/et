@@ -12,6 +12,47 @@ from resources.lib import realdebrid
 from resources.lib import trakt
 
 
+def is_movie(entry):
+	return (entry or {}).get('media_type') == 'movie'
+
+
+def display_label(entry):
+	"""Human label for an episode or movie entry."""
+	if is_movie(entry):
+		year = entry.get('year')
+		return '%s (%s)' % (entry.get('title', ''), year) if year \
+			else entry.get('title', '')
+	try:
+		season = int(entry.get('season') or 0)
+		episode = int(entry.get('episode') or 0)
+	except (TypeError, ValueError):
+		season, episode = 0, 0
+	return '%s - %dx%02d - %s' % (entry.get('show_title', ''), season,
+								  episode, entry.get('ep_title', ''))
+
+
+def media_info(entry):
+	"""Kodi info-label dict for an episode or movie entry."""
+	if is_movie(entry):
+		return {
+			'mediatype': 'movie',
+			'title': entry.get('title', ''),
+			'plot': entry.get('plot', ''),
+			'premiered': (entry.get('released') or '')[:10],
+			'duration': (entry.get('runtime') or 0) * 60 or None,
+		}
+	return {
+		'mediatype': 'episode',
+		'tvshowtitle': entry.get('show_title', ''),
+		'title': entry.get('ep_title', ''),
+		'season': entry.get('season'),
+		'episode': entry.get('episode'),
+		'plot': entry.get('plot', ''),
+		'aired': (entry.get('first_aired') or '')[:10],
+		'premiered': (entry.get('first_aired') or '')[:10],
+	}
+
+
 def _magnet_for(source):
 	url = source.get('url', '')
 	if url.startswith('magnet:'):
@@ -24,13 +65,19 @@ def _magnet_for(source):
 
 
 def _resolve_one(source, entry):
-	"""Resolve a single source, returning ``(url, error)``."""
+	"""Resolve a single source, returning ``(url, error)``.
+
+	Movies pass no season/episode, so Real-Debrid falls through to picking
+	the largest video file in the torrent rather than episode-matching.
+	"""
+	if is_movie(entry):
+		season, episode, title = None, None, entry.get('title', '')
+	else:
+		season = entry.get('season')
+		episode = entry.get('episode')
+		title = entry.get('show_title', '')
 	return realdebrid.resolve_magnet(
-		_magnet_for(source),
-		source.get('hash', ''),
-		entry.get('season'),
-		entry.get('episode'),
-		entry.get('show_title', ''))
+		_magnet_for(source), source.get('hash', ''), season, episode, title)
 
 
 def _candidates(source, entry):
@@ -95,19 +142,8 @@ def play(source, entry):
 		return
 
 	item = xbmcgui.ListItem(path=resolved)
-	label = '%s - %sx%02d - %s' % (
-		entry.get('show_title', ''), entry.get('season', 0),
-		int(entry.get('episode', 0) or 0), entry.get('ep_title', ''))
-	item.setLabel(label)
-	info = {
-		'mediatype': 'episode',
-		'tvshowtitle': entry.get('show_title', ''),
-		'title': entry.get('ep_title', ''),
-		'season': entry.get('season'),
-		'episode': entry.get('episode'),
-		'plot': entry.get('plot', ''),
-		'aired': (entry.get('first_aired') or '')[:10],
-	}
+	item.setLabel(display_label(entry))
+	info = media_info(entry)
 	try:
 		tag = item.getVideoInfoTag()
 		control._apply_info_tag(tag, info)

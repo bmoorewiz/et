@@ -251,6 +251,7 @@ def _build_entry(show, progress):
 	show_ids = show.get('ids', {})
 	ep_ids = next_ep.get('ids', {})
 	return {
+		'media_type': 'episode',
 		'show_title': show.get('title', ''),
 		'show_year': show.get('year'),
 		'show_trakt': show_ids.get('trakt'),
@@ -363,31 +364,151 @@ def _parse_iso(value):
 
 
 # ---------------------------------------------------------------------------
+# Search and browse
+# ---------------------------------------------------------------------------
+
+def _ids(item):
+	return item.get('ids', {}) or {}
+
+
+def search_shows(query, limit=40):
+	"""Search Trakt for shows. Returns light show dicts."""
+	results = _request('GET', '/search/show', auth=False, params={
+		'query': query, 'limit': limit, 'extended': 'full'}) or []
+	shows = []
+	for row in results:
+		show = row.get('show') or {}
+		if not show:
+			continue
+		ids = _ids(show)
+		shows.append({
+			'media_type': 'show',
+			'show_title': show.get('title', ''),
+			'show_year': show.get('year'),
+			'show_trakt': ids.get('trakt'),
+			'show_slug': ids.get('slug'),
+			'show_imdb': ids.get('imdb'),
+			'show_tvdb': ids.get('tvdb'),
+			'show_tmdb': ids.get('tmdb'),
+			'plot': show.get('overview', '') or '',
+			'seasons_count': show.get('aired_episodes'),
+		})
+	return shows
+
+
+def search_movies(query, limit=40):
+	"""Search Trakt for movies. Returns playable movie entries."""
+	results = _request('GET', '/search/movie', auth=False, params={
+		'query': query, 'limit': limit, 'extended': 'full'}) or []
+	movies = []
+	for row in results:
+		movie = row.get('movie') or {}
+		if not movie:
+			continue
+		ids = _ids(movie)
+		movies.append({
+			'media_type': 'movie',
+			'title': movie.get('title', ''),
+			'year': movie.get('year'),
+			'movie_trakt': ids.get('trakt'),
+			'movie_slug': ids.get('slug'),
+			'imdb': ids.get('imdb'),
+			'tmdb': ids.get('tmdb'),
+			'plot': movie.get('overview', '') or '',
+			'runtime': movie.get('runtime'),
+			'released': movie.get('released', '') or '',
+		})
+	return movies
+
+
+def show_seasons(show_id):
+	"""Seasons for a show, specials (season 0) excluded."""
+	seasons = _request('GET', '/shows/%s/seasons' % show_id, auth=False,
+					   params={'extended': 'full'}) or []
+	return [s for s in seasons if (s.get('number') or 0) > 0]
+
+
+def season_episodes(show, season_number):
+	"""Episodes of one season, returned as playable episode entries."""
+	show_id = show.get('show_trakt') or show.get('show_slug')
+	episodes = _request('GET', '/shows/%s/seasons/%s/episodes'
+						% (show_id, season_number), auth=False,
+						params={'extended': 'full'}) or []
+	entries = []
+	for episode in episodes:
+		ids = _ids(episode)
+		entries.append({
+			'media_type': 'episode',
+			'show_title': show.get('show_title', ''),
+			'show_year': show.get('show_year'),
+			'show_trakt': show.get('show_trakt'),
+			'show_imdb': show.get('show_imdb'),
+			'show_tvdb': show.get('show_tvdb'),
+			'show_tmdb': show.get('show_tmdb'),
+			'season': episode.get('season'),
+			'episode': episode.get('number'),
+			'ep_title': episode.get('title') or 'Episode %s' % episode.get('number'),
+			'ep_trakt': ids.get('trakt'),
+			'ep_imdb': ids.get('imdb'),
+			'ep_tvdb': ids.get('tvdb'),
+			'ep_tmdb': ids.get('tmdb'),
+			'first_aired': episode.get('first_aired'),
+			'runtime': episode.get('runtime'),
+			'plot': episode.get('overview', '') or '',
+		})
+	return entries
+
+
+# ---------------------------------------------------------------------------
 # Scrobble / history
 # ---------------------------------------------------------------------------
 
-def _episode_ref(entry):
+def is_movie(entry):
+	return (entry or {}).get('media_type') == 'movie'
+
+
+def _media_ref(entry):
+	"""Trakt id reference for an entry, whichever media type it is."""
 	ids = {}
-	for src, key in (('ep_trakt', 'trakt'), ('ep_imdb', 'imdb'),
-					 ('ep_tvdb', 'tvdb'), ('ep_tmdb', 'tmdb')):
-		if entry.get(src):
-			ids[key] = entry[src]
+	if is_movie(entry):
+		for src, key in (('movie_trakt', 'trakt'), ('imdb', 'imdb'),
+						 ('tmdb', 'tmdb'), ('movie_slug', 'slug')):
+			if entry.get(src):
+				ids[key] = entry[src]
+	else:
+		for src, key in (('ep_trakt', 'trakt'), ('ep_imdb', 'imdb'),
+						 ('ep_tvdb', 'tvdb'), ('ep_tmdb', 'tmdb')):
+			if entry.get(src):
+				ids[key] = entry[src]
 	return {'ids': ids}
 
 
+def _scrobble_body(entry):
+	key = 'movie' if is_movie(entry) else 'episode'
+	return key, {key: _media_ref(entry)}
+
+
 def scrobble(entry, action, progress_percent):
-	"""Send a scrobble start/pause/stop event for the given episode entry."""
+	"""Send a scrobble start/pause/stop event for an episode or movie."""
 	if not control.get_bool('scrobble.enabled', True) or not authorized():
 		return
-	payload = {'episode': _episode_ref(entry), 'progress': float(progress_percent)}
+	if not _media_ref(entry)['ids']:
+		control.log('scrobble skipped: entry carries no Trakt ids')
+		return
+	_key, payload = _scrobble_body(entry)
+	payload['progress'] = float(progress_percent)
 	_request('POST', '/scrobble/%s' % action, payload=payload)
 
 
 def add_to_history(entry):
-	"""Mark the episode watched by adding it to the Trakt history."""
+	"""Mark an episode or movie watched by adding it to the Trakt history."""
 	if not authorized():
 		return False
-	payload = {'episodes': [_episode_ref(entry)]}
+	ref = _media_ref(entry)
+	if not ref['ids']:
+		control.log('mark watched skipped: entry carries no Trakt ids')
+		return False
+	payload = {'movies': [ref]} if is_movie(entry) else {'episodes': [ref]}
 	result = _request('POST', '/sync/history', payload=payload)
 	# invalidate the cached next-up list so it recomputes
 	cache.delete('trakt_next_%s' % control.setting('trakt.user', 'me'))

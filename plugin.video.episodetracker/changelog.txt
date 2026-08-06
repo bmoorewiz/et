@@ -1,3 +1,15 @@
+v1.1.0
+- New: Search TV Shows. Search Trakt, pick a show, then a season, then an
+  episode, and play it like any next-up episode.
+- New: Search Movies. Search Trakt and play a movie directly.
+- Both are scrobbled to Trakt and marked watched when playback finishes,
+  and both have a "Mark as watched on Trakt" context menu entry.
+- Movie scraping uses the movie-capable providers and sends the movie
+  data shape the scrapers expect, with no tvshowtitle - its presence is
+  what switches a scraper into episode mode.
+- Movies resolve to the largest video file in a torrent rather than
+  episode-matching by filename.
+
 v1.0.8
 - Security fix: credentials could end up in the Kodi log. Real-Debrid
   takes its token as a URL query parameter, so any network error wrote

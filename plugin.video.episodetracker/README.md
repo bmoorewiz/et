@@ -82,6 +82,12 @@ distributed add-on; it only identifies the application.
   tracking on Trakt. Selecting one scrapes sources and lists them ranked by
   quality and seeders; pick one to play. Enable **Auto-play best source** in
   settings to skip the source list.
+- **Search TV Shows** — search Trakt, pick a show, then a season, then an
+  episode. Plays exactly like a next-up episode.
+- **Search Movies** — search Trakt and play a movie directly.
+
+Everything you play is scrobbled to Trakt and marked watched when it
+finishes, whether you got to it through Next Episodes or search.
 - Playback scrobbles to Trakt automatically and marks the episode watched at
   the end, so the show's next episode appears on your next visit.
 - Right-click an episode for **Mark as watched on Trakt** and **Refresh**.

@@ -39,6 +39,14 @@ def dispatch():
 		return player.play(payload['source'], payload['entry'])
 	if action == 'mark_watched':
 		return mark_watched(_decode(params['entry']))
+	if action == 'search_shows':
+		return search_menu('show')
+	if action == 'search_movies':
+		return search_menu('movie')
+	if action == 'show_seasons':
+		return seasons_menu(_decode(params['entry']))
+	if action == 'season_episodes':
+		return episodes_menu(_decode(params['entry']), params['season'])
 	if action == 'trakt_auth':
 		return _auth(trakt.authenticate)
 	if action == 'trakt_revoke':
@@ -86,6 +94,13 @@ def main_menu():
 		{'action': 'next_episodes'},
 		art={'icon': control.addon_icon},
 		info={'plot': control.lang(33001)})
+
+	control.add_directory_item(
+		control.lang(33050), {'action': 'search_shows'},
+		art={'icon': control.addon_icon}, info={'plot': control.lang(33050)})
+	control.add_directory_item(
+		control.lang(33051), {'action': 'search_movies'},
+		art={'icon': control.addon_icon}, info={'plot': control.lang(33051)})
 
 	if not trakt.authorized():
 		control.add_directory_item(
@@ -176,6 +191,115 @@ def _add_episode_item(entry, autoplay):
 		context=context)
 
 
+# ---------------------------------------------------------------------------
+# Search
+# ---------------------------------------------------------------------------
+
+def search_menu(media_type):
+	"""Prompt for a query, then list matching shows or movies."""
+	heading = control.lang(33050 if media_type == 'show' else 33051)
+	query = control.keyboard(heading=heading)
+	if not query:
+		control.end_directory(cache_to_disc=False, content='')
+		return
+
+	pd = control.progress_bg
+	pd.create(control.addon_name, control.langf(33052, query))
+	try:
+		if media_type == 'show':
+			results = trakt.search_shows(query)
+		else:
+			results = trakt.search_movies(query)
+	finally:
+		pd.close()
+
+	if not results:
+		control.ok_dialog(control.langf(33053, query))
+		control.end_directory(cache_to_disc=False, content='')
+		return
+
+	for item in results:
+		if media_type == 'show':
+			_add_show_item(item)
+		else:
+			_add_movie_item(item)
+
+	# search results are query-specific; caching them to disc is unhelpful
+	control.end_directory(cache_to_disc=False,
+						  content='tvshows' if media_type == 'show' else 'movies')
+
+
+def _add_show_item(show):
+	year = show.get('show_year')
+	label = '%s (%s)' % (show.get('show_title', ''), year) if year \
+		else show.get('show_title', '')
+	control.add_directory_item(
+		label,
+		{'action': 'show_seasons', 'entry': _encode(show)},
+		is_folder=True,
+		art={'icon': control.addon_icon},
+		info={'mediatype': 'tvshow',
+			  'title': show.get('show_title', ''),
+			  'plot': show.get('plot', '')})
+
+
+def _add_movie_item(movie):
+	year = movie.get('year')
+	label = '%s (%s)' % (movie.get('title', ''), year) if year \
+		else movie.get('title', '')
+	encoded = _encode(movie)
+	autoplay = control.get_bool('results.autoplay', False)
+	context = [(control.lang(33022),
+				'RunPlugin(%s)' % control.build_url(
+					{'action': 'mark_watched', 'entry': encoded}))]
+	control.add_directory_item(
+		label,
+		{'action': 'autoplay' if autoplay else 'sources', 'entry': encoded},
+		is_folder=not autoplay,
+		is_playable=autoplay,
+		art={'icon': control.addon_icon},
+		info={'mediatype': 'movie',
+			  'title': movie.get('title', ''),
+			  'plot': movie.get('plot', ''),
+			  'premiered': (movie.get('released') or '')[:10],
+			  'duration': (movie.get('runtime') or 0) * 60 or None},
+		context=context)
+
+
+def seasons_menu(show):
+	seasons = trakt.show_seasons(show.get('show_trakt') or show.get('show_slug'))
+	if not seasons:
+		control.notify(33054)
+		control.end_directory(cache_to_disc=False, content='')
+		return
+	for season in seasons:
+		number = season.get('number')
+		count = season.get('episode_count') or 0
+		control.add_directory_item(
+			control.langf(33055, number, count),
+			{'action': 'season_episodes', 'entry': _encode(show),
+			 'season': str(number)},
+			is_folder=True,
+			art={'icon': control.addon_icon},
+			info={'mediatype': 'season',
+				  'title': control.langf(33055, number, count),
+				  'season': number,
+				  'plot': season.get('overview', '') or show.get('plot', '')})
+	control.end_directory(cache_to_disc=False, content='seasons')
+
+
+def episodes_menu(show, season_number):
+	entries = trakt.season_episodes(show, season_number)
+	if not entries:
+		control.notify(33054)
+		control.end_directory(cache_to_disc=False, content='')
+		return
+	autoplay = control.get_bool('results.autoplay', False)
+	for entry in entries:
+		_add_episode_item(entry, autoplay)
+	control.end_directory(cache_to_disc=False, content='episodes')
+
+
 def sources_menu(entry):
 	if not _preflight():
 		control.end_directory(content='')
@@ -245,9 +369,7 @@ def _add_source_item(source, entry, cache_known=False):
 		is_folder=False,
 		is_playable=True,
 		art={'icon': control.addon_icon},
-		info={'mediatype': 'episode',
-			  'title': entry.get('ep_title', ''),
-			  'tvshowtitle': entry.get('show_title', '')})
+		info=player.media_info(entry))
 
 
 def autoplay(entry):

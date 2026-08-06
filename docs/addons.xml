@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-	<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.0.8" provider-name="bmoorewiz">
+	<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.1.0" provider-name="bmoorewiz">
 		<requires>
 			<import addon="xbmc.python" version="3.0.0" />
 			<import addon="script.module.requests" version="2.22.0" />
@@ -11,7 +11,7 @@
 		</extension>
 		<extension point="xbmc.addon.metadata">
 			<reuselanguageinvoker>false</reuselanguageinvoker>
-			<summary lang="en_GB">Track and watch your Trakt next episodes via Real-Debrid.</summary>
+			<summary lang="en_GB">Track and watch your Trakt next episodes, and search TV shows and movies, via Real-Debrid.</summary>
 			<description lang="en_GB">Episode Tracker focuses on one job: your Trakt "next up" episodes. It pulls the next unwatched episode for every show you are progressing through on Trakt.tv, scrapes torrent sources with the CocoScrapers module, resolves cached links through Real-Debrid, plays them, and scrobbles your progress back to Trakt. Requires the script.module.cocoscrapers module, a Trakt.tv account, and a Real-Debrid subscription.</description>
 			<disclaimer lang="en_GB">This addon does not host, provide, or link to any content. It is a metadata and playback front-end for services the user independently subscribes to (Trakt.tv and Real-Debrid) and third-party scraper modules the user independently installs. The author is not responsible for the content accessed through it, and is in no way affiliated with Kodi, Team Kodi, or the XBMC Foundation.</disclaimer>
 			<platform>all</platform>
@@ -21,7 +21,7 @@
 				<icon>resources/icon.png</icon>
 				<fanart>resources/fanart.png</fanart>
 			</assets>
-			<news>v1.0.8 - Security fix: Real-Debrid and Trakt tokens could appear in the Kodi log via error tracebacks. They are now redacted.</news>
+			<news>v1.1.0 - Adds Search TV Shows and Search Movies. Search, play through Real-Debrid, and it is marked watched on Trakt when it finishes.</news>
 		</extension>
 	</addon>
 	<addon id="repository.episodetracker" name="Episode Tracker Repository" version="1.0.0" provider-name="bmoorewiz">

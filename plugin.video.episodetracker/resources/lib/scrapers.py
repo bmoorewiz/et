@@ -55,21 +55,26 @@ def open_settings():
 		return False
 
 
-def _episode_providers(coco):
-	"""Return the enabled providers that can scrape episodes."""
+def is_movie(entry):
+	return (entry or {}).get('media_type') == 'movie'
+
+
+def _providers(coco, movie=False):
+	"""Enabled providers that can scrape the requested media type."""
 	try:
 		providers = coco.sources()
 	except Exception:
 		control.error('cocoscrapers.sources() failed')
 		return []
-	episode_providers = []
+	attribute = 'hasMovies' if movie else 'hasEpisodes'
+	usable = []
 	for name, source_cls in providers:
 		try:
-			if getattr(source_cls, 'hasEpisodes', True):
-				episode_providers.append((name, source_cls))
+			if getattr(source_cls, attribute, True):
+				usable.append((name, source_cls))
 		except Exception:
 			continue
-	return episode_providers
+	return usable
 
 
 def _build_data(entry):
@@ -85,18 +90,30 @@ def _build_data(entry):
 	def text(value):
 		return '' if value is None else str(value)
 
-	data = {
-		'title': text(entry.get('ep_title')),
-		'tvshowtitle': text(entry.get('show_title')),
-		'year': text(entry.get('show_year')),
-		'imdb': text(entry.get('show_imdb')),
-		'tvdb': text(entry.get('show_tvdb')),
-		'tmdb': text(entry.get('show_tmdb')),
-		'season': text(entry.get('season')),
-		'episode': text(entry.get('episode')),
-		'premiered': text(entry.get('first_aired'))[:10],
-		'aliases': [],
-	}
+	if is_movie(entry):
+		# Movie scrapers key off title/year/imdb and must NOT see a
+		# tvshowtitle - its presence is what switches them to episode mode.
+		data = {
+			'title': text(entry.get('title')),
+			'year': text(entry.get('year')),
+			'imdb': text(entry.get('imdb')),
+			'tmdb': text(entry.get('tmdb')),
+			'premiered': text(entry.get('released'))[:10],
+			'aliases': [],
+		}
+	else:
+		data = {
+			'title': text(entry.get('ep_title')),
+			'tvshowtitle': text(entry.get('show_title')),
+			'year': text(entry.get('show_year')),
+			'imdb': text(entry.get('show_imdb')),
+			'tvdb': text(entry.get('show_tvdb')),
+			'tmdb': text(entry.get('show_tmdb')),
+			'season': text(entry.get('season')),
+			'episode': text(entry.get('episode')),
+			'premiered': text(entry.get('first_aired'))[:10],
+			'aliases': [],
+		}
 	if control.setting('rd.token'):
 		data['debrid_service'] = 'Real-Debrid'
 		data['debrid_token'] = control.setting('rd.token')
@@ -114,7 +131,7 @@ def scrape(entry, progress_cb=None):
 	if cached is not None:
 		return _filter_and_rank(cached)
 
-	providers = _episode_providers(coco)
+	providers = _providers(coco, movie=is_movie(entry))
 	if not providers:
 		# CocoScrapers only returns providers whose "provider.<name>" setting
 		# is enabled, so an empty list means none are turned on - a different
@@ -176,13 +193,21 @@ def scrape(entry, progress_cb=None):
 		cache.set(cache_key, unique,
 				  hours=max(1, control.get_int('cache.hours', 6)))
 	else:
-		control.log('no sources returned by %d provider(s) for %s S%sE%s'
-					% (len(providers), data.get('tvshowtitle'),
-					   data.get('season'), data.get('episode')))
+		control.log('no sources returned by %d provider(s) for %s'
+					% (len(providers), _describe(entry)))
 	return _filter_and_rank(unique)
 
 
+def _describe(entry):
+	if is_movie(entry):
+		return '%s (%s)' % (entry.get('title'), entry.get('year'))
+	return '%s S%sE%s' % (entry.get('show_title'),
+						  entry.get('season'), entry.get('episode'))
+
+
 def _cache_key(entry):
+	if is_movie(entry):
+		return 'sources_movie_%s' % (entry.get('imdb') or entry.get('movie_trakt'))
 	return 'sources_%s_s%se%s' % (
 		entry.get('show_imdb') or entry.get('show_trakt'),
 		entry.get('season'), entry.get('episode'))
