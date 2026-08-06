@@ -1,3 +1,8 @@
+v1.0.4
+- Trakt application credentials are now included, so signing in needs no
+  setup at all: choose Authorize Trakt, then enter the code shown at
+  trakt.tv/activate.
+
 v1.0.3
 - Trakt sign-in is the trakt.tv/activate device flow, the same as
   Real-Debrid: the add-on shows a code and you enter it on the website.

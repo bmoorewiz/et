@@ -46,8 +46,8 @@ ACTIVATE_URL = 'https://trakt.tv/activate'
 # distributed add-on - it only identifies the application. Leaving these blank
 # falls back to per-user credentials entered in Settings > Accounts.
 # ---------------------------------------------------------------------------
-DEFAULT_CLIENT_ID = ''
-DEFAULT_CLIENT_SECRET = ''
+DEFAULT_CLIENT_ID = 'IUPwuToqCD7nugy77UfWzhdXjFE6KtjIhltl8tUxisQ'
+DEFAULT_CLIENT_SECRET = 'hamIeKKZGXa8nSDSZG0Hs8Sf8nzMNsXHKwwYWUVs0hI'
 
 _TIMEOUT = 20
 
