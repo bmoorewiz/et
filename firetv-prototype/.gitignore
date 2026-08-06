@@ -1,0 +1,9 @@
+# Third-party module fetched by tools/fetch_cocoscrapers.sh, not vendored here
+app/src/main/python/cocoscrapers/
+# Android/Gradle build output
+build/
+app/build/
+.gradle/
+local.properties
+*.iml
+.idea/

@@ -1,0 +1,50 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+    id "com.chaquo.python"
+}
+
+android {
+    namespace "com.bmoorewiz.episodetracker"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.bmoorewiz.episodetracker"
+        // Fire OS 7 is Android 9 (API 28); Chaquopy needs API 24+.
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "0.1.0"
+
+        ndk {
+            // Fire TV hardware: 32-bit and 64-bit ARM. x86 only for emulators.
+            abiFilters "armeabi-v7a", "arm64-v8a"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+}
+
+chaquopy {
+    defaultConfig {
+        version "3.11"
+        pip {
+            // The only non-stdlib dependency the scrapers have.
+            install "requests"
+        }
+    }
+}
+
+dependencies {
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "androidx.appcompat:appcompat:1.7.0"
+}
