@@ -20,6 +20,10 @@ COCO_ID = 'script.module.cocoscrapers'
 
 _QUALITY_RANK = {'4K': 4, '1080p': 3, '720p': 2, 'SD': 1, 'CAM': 0, 'SCR': 0}
 
+# scrape() sentinels, distinct from an ordinary empty result
+MODULE_MISSING = None
+NO_PROVIDERS = 'no_providers'
+
 
 def available():
 	return _load() is not None
@@ -69,19 +73,28 @@ def _episode_providers(coco):
 
 
 def _build_data(entry):
-	"""Build the `data` dict the CocoScrapers episode scrapers expect."""
-	title = entry.get('ep_title') or ''
-	tvshowtitle = entry.get('show_title') or ''
+	"""Build the `data` dict the CocoScrapers episode scrapers expect.
+
+	Every value here must be a *string*. The scrapers hand these straight to
+	string operations - source_utils.check_title() does
+	``title.replace('&', 'and').replace(year, '')`` - so passing Trakt's
+	JSON-decoded integers (year, tvdb, tmdb) makes that call fail and every
+	candidate release gets discarded, which looks exactly like "no sources
+	found".
+	"""
+	def text(value):
+		return '' if value is None else str(value)
+
 	data = {
-		'title': title,
-		'tvshowtitle': tvshowtitle,
-		'year': entry.get('show_year'),
-		'imdb': entry.get('show_imdb') or '',
-		'tvdb': entry.get('show_tvdb') or '',
-		'tmdb': entry.get('show_tmdb') or '',
-		'season': str(entry.get('season')),
-		'episode': str(entry.get('episode')),
-		'premiered': (entry.get('first_aired') or '')[:10],
+		'title': text(entry.get('ep_title')),
+		'tvshowtitle': text(entry.get('show_title')),
+		'year': text(entry.get('show_year')),
+		'imdb': text(entry.get('show_imdb')),
+		'tvdb': text(entry.get('show_tvdb')),
+		'tmdb': text(entry.get('show_tmdb')),
+		'season': text(entry.get('season')),
+		'episode': text(entry.get('episode')),
+		'premiered': text(entry.get('first_aired'))[:10],
 		'aliases': [],
 	}
 	if control.setting('rd.token'):
@@ -105,7 +118,11 @@ def scrape(entry, progress_cb=None):
 
 	providers = _episode_providers(coco)
 	if not providers:
-		return []
+		# CocoScrapers only returns providers whose "provider.<name>" setting
+		# is enabled, so an empty list means none are turned on - a different
+		# problem from having scraped and found nothing.
+		control.log('CocoScrapers returned no enabled episode providers')
+		return NO_PROVIDERS
 
 	data = _build_data(entry)
 	host_dict = []  # torrent providers ignore this; hosters would use RD domains
@@ -153,7 +170,17 @@ def scrape(entry, progress_cb=None):
 		seen.add(key)
 		unique.append(item)
 
-	cache.set(cache_key, unique, hours=max(1, control.get_int('cache.hours', 6)))
+	# Only cache a real result. Caching an empty list would hide sources for
+	# the whole cache window after one bad scrape - a transient network
+	# failure, or providers not yet enabled - and look like a permanent
+	# "nothing found".
+	if unique:
+		cache.set(cache_key, unique,
+				  hours=max(1, control.get_int('cache.hours', 6)))
+	else:
+		control.log('no sources returned by %d provider(s) for %s S%sE%s'
+					% (len(providers), data.get('tvshowtitle'),
+					   data.get('season'), data.get('episode')))
 	return _filter_and_rank(unique)
 
 

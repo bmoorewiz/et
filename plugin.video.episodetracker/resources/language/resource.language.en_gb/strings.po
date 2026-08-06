@@ -344,6 +344,10 @@ msgctxt "#33040"
 msgid "Update available: v%s - select to install"
 msgstr ""
 
+msgctxt "#33042"
+msgid "No scraper providers are enabled in CocoScrapers, so there is nothing to search. Open CocoScrapers settings and enable some providers (Torrentio is a good start)?"
+msgstr ""
+
 msgctxt "#33041"
 msgid "This build has no Trakt application credentials, so it cannot start the trakt.tv/activate sign-in. Create a free application at trakt.tv/oauth/applications with redirect uri urn:ietf:wg:oauth:2.0:oob, then paste its Client ID and Secret into Settings. Open Settings now?"
 msgstr ""

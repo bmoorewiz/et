@@ -1,3 +1,16 @@
+v1.0.5
+- Fixed scraping always finding no sources. Trakt returns year, tvdb and
+  tmdb as numbers, and these were passed to CocoScrapers unchanged. The
+  scrapers feed them to string operations - check_title() runs
+  title.replace(year, '') - so the check failed for every candidate and
+  every release was discarded. All scraper-facing values are now strings.
+- Empty scrape results are no longer cached. One failed scrape used to
+  hide sources for the whole cache window (6 hours by default), so a
+  transient failure looked permanent.
+- "No providers enabled in CocoScrapers" is now reported distinctly, with
+  an offer to open its settings, instead of looking like "no sources
+  found".
+
 v1.0.4
 - Trakt application credentials are now included, so signing in needs no
   setup at all: choose Authorize Trakt, then enter the code shown at

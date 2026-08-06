@@ -192,8 +192,13 @@ def sources_menu(entry):
 	finally:
 		pd.close()
 
-	if sources is None:
+	if sources is scrapers.MODULE_MISSING:
 		control.ok_dialog(33008)
+		control.end_directory(content='')
+		return
+	if sources == scrapers.NO_PROVIDERS:
+		if control.yesno_dialog(33042):
+			scrapers.open_settings()
 		control.end_directory(content='')
 		return
 	if not sources:
@@ -245,6 +250,8 @@ def autoplay(entry):
 		sources = scrapers.scrape(entry)
 	finally:
 		pd.close()
+	if sources == scrapers.NO_PROVIDERS:
+		sources = []
 	if not sources:
 		control.notify(33012)
 		control.resolve_failed()
