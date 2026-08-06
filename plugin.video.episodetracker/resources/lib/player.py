@@ -92,8 +92,35 @@ def _resolve_one(source, entry):
 		_magnet_for(source), source.get('hash', ''), season, episode, title)
 
 
+# How many sources to try per quality tier, best first, before giving up.
+# CAM and screener results are counted in the SD bucket.
+_TIERS = (
+	('4K', 'playback.try.4k', 5),
+	('1080p', 'playback.try.1080p', 5),
+	('720p', 'playback.try.720p', 10),
+	('SD', 'playback.try.sd', 0),
+)
+_TIER_OF = {'4K': '4K', '1080p': '1080p', '720p': '720p',
+			'SD': 'SD', 'CAM': 'SD', 'SCR': 'SD'}
+
+
+def _tier(source):
+	return _TIER_OF.get(source.get('quality', 'SD'), 'SD')
+
+
+def _source_key(source):
+	return (source.get('hash') or source.get('url') or '').lower()
+
+
 def _candidates(source, entry):
-	"""The chosen source, followed by the remaining ranked ones."""
+	"""Build the fallback queue: the chosen source, then a per-quality budget.
+
+	Rather than a flat number of attempts, each quality tier gets its own
+	allowance and they are spent best-first - so a failing episode burns
+	through the good 4K/1080p options before dropping to 720p, and stops
+	instead of grinding through hundreds of low-quality results. The chosen
+	source is always tried first and counts against its own tier.
+	"""
 	queue = [source]
 	if not control.get_bool('playback.autonext', True):
 		return queue
@@ -102,25 +129,37 @@ def _candidates(source, entry):
 		ranked = scrapers.cached_sources(entry) or []
 	except Exception:
 		return queue
-	chosen = (source.get('hash') or source.get('url') or '').lower()
-	seen = {chosen}
-	started = False
-	for item in ranked:
-		key = (item.get('hash') or item.get('url') or '').lower()
-		if key == chosen:
-			started = True
+
+	quotas = {tier: max(0, control.get_int(key, default))
+			  for tier, key, default in _TIERS}
+	used = {tier: 0 for tier, _key, _default in _TIERS}
+	used[_tier(source)] = 1
+	seen = {_source_key(source)}
+
+	for tier, _key, _default in _TIERS:
+		if used[tier] >= quotas[tier]:
 			continue
-		if not started or key in seen:
-			continue
-		seen.add(key)
-		queue.append(item)
+		for item in ranked:
+			key = _source_key(item)
+			if not key or key in seen or _tier(item) != tier:
+				continue
+			seen.add(key)
+			queue.append(item)
+			used[tier] += 1
+			if used[tier] >= quotas[tier]:
+				break
+
+	control.log('fallback queue: %d source(s) - %s'
+				% (len(queue), ', '.join('%s %d/%d' % (t, used[t], quotas[t])
+										 for t, _k, _d in _TIERS if quotas[t])))
 	return queue
 
 
 def play(source, entry):
 	"""Resolve and play, falling through to the next ranked source on failure."""
-	attempts = max(1, control.get_int('playback.max_attempts', 25))
-	queue = _candidates(source, entry)[:attempts]
+	# The per-tier budgets in _candidates() bound this; there is deliberately
+	# no separate flat cap, which would otherwise silently truncate them.
+	queue = _candidates(source, entry)
 
 	pd = control.progress_bg
 	pd.create(control.addon_name, control.lang(33013))

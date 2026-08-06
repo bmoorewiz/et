@@ -1,3 +1,18 @@
+v1.3.0
+- When a source fails to resolve, the fallback now works through a
+  per-quality budget instead of a flat count: 5 x 4K, then 5 x 1080p,
+  then 10 x 720p, then it gives up. Each tier is a setting under
+  Settings > Playback, so the ladder can be reshaped.
+- SD, CAM and screener results are excluded from the automatic fallback
+  by default (their budget is 0). Set "SD sources to try" above zero to
+  include them.
+- The source you pick is always tried first and counts against its own
+  tier's budget.
+- Replaces the single "Maximum sources to try" setting, which is gone.
+  It had to go rather than act as an extra ceiling: an existing install
+  had it saved at 4, which would have silently truncated the new
+  20-source ladder to 4 attempts.
+
 v1.2.1
 - Uncached sources are now given up on as soon as Real-Debrid starts
   actually downloading them, after a short grace period, instead of

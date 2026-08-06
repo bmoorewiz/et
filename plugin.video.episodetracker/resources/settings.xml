@@ -34,7 +34,10 @@
 		<setting id="rd.resolve_timeout" type="slider" label="32051" default="15" range="5,5,120" option="int" />
 		<setting id="rd.uncached_grace" type="slider" label="32059" default="4" range="2,1,20" option="int" />
 		<setting id="playback.autonext" type="bool" label="32052" default="true" />
-		<setting id="playback.max_attempts" type="slider" label="32053" default="25" range="1,1,50" option="int" subsetting="true" enable="eq(-1,true)" />
+		<setting id="playback.try.4k" type="slider" label="32070" default="5" range="0,1,20" option="int" subsetting="true" enable="eq(-1,true)" />
+		<setting id="playback.try.1080p" type="slider" label="32071" default="5" range="0,1,20" option="int" subsetting="true" enable="eq(-2,true)" />
+		<setting id="playback.try.720p" type="slider" label="32072" default="10" range="0,1,30" option="int" subsetting="true" enable="eq(-3,true)" />
+		<setting id="playback.try.sd" type="slider" label="32073" default="0" range="0,1,20" option="int" subsetting="true" enable="eq(-4,true)" />
 		<setting id="sources.check_cache" type="bool" label="32054" default="true" />
 		<setting id="sources.only_cached" type="bool" label="32055" default="false" subsetting="true" enable="eq(-1,true)" />
 		<setting id="rd.cache_check_minutes" type="slider" label="32056" default="20" range="5,5,120" option="int" subsetting="true" enable="eq(-2,true)" />

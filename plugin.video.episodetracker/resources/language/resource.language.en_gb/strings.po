@@ -166,6 +166,22 @@ msgctxt "#32059"
 msgid "Give up on an uncached source after (seconds)"
 msgstr ""
 
+msgctxt "#32070"
+msgid "4K sources to try"
+msgstr ""
+
+msgctxt "#32071"
+msgid "1080p sources to try"
+msgstr ""
+
+msgctxt "#32072"
+msgid "720p sources to try"
+msgstr ""
+
+msgctxt "#32073"
+msgid "SD sources to try"
+msgstr ""
+
 msgctxt "#32060"
 msgid "Lists"
 msgstr ""
