@@ -1,3 +1,19 @@
+v1.2.1
+- Uncached sources are now given up on as soon as Real-Debrid starts
+  actually downloading them, after a short grace period, instead of
+  waiting out the whole resolve timeout. Real-Debrid only downloads a
+  torrent that was not already cached, so continuing to wait could never
+  succeed quickly. In testing this cut a run of 25 attempts from about
+  8 minutes to about 2.5.
+- New setting: "Give up on an uncached source after (seconds)", default
+  4. A cached torrent passes through queued/downloading almost
+  instantly, so the grace period keeps those from being abandoned by
+  mistake; raise it if fast sources are being skipped.
+- Real-Debrid resolve timeout default lowered from 20s to 15s. It now
+  only bounds the genuinely slow cases, since uncached sources exit via
+  the grace period.
+- The "not cached" message now includes the seeder count.
+
 v1.2.0
 - Scraped sources now colour the quality badge by tier so the list is
   scannable at a glance: 4K gold, 1080p green, 720p blue, SD grey,

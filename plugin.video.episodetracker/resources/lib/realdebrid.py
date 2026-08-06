@@ -535,9 +535,11 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 			if not torrent_id:
 				return None, add_error or 'Real-Debrid rejected the magnet'
 
-			timeout = max(5, control.get_int('rd.resolve_timeout', 20))
+			timeout = max(5, control.get_int('rd.resolve_timeout', 15))
+			grace = max(2, control.get_int('rd.uncached_grace', 4))
 			deadline = time.time() + timeout
 			info, status, selected_once = None, '', False
+			pending_since = None
 
 			while time.time() < deadline:
 				info = torrent_info(torrent_id)
@@ -550,18 +552,28 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 				if status == 'waiting_files_selection':
 					select_files(torrent_id, 'all')
 					selected_once = True
+					pending_since = None
 				elif status == 'downloaded' and info.get('links'):
 					break
+				elif status in _PENDING:
+					# Real-Debrid is actually fetching this, so it was not
+					# cached. A cached torrent passes through queued/downloading
+					# almost instantly, so allow a short grace period and then
+					# give up rather than burning the whole timeout on a source
+					# we already know will not be instant.
+					if pending_since is None:
+						pending_since = time.time()
+					elif time.time() - pending_since >= grace:
+						return _fail(torrent_id, _uncached_message(info))
+				else:
+					pending_since = None
 				control.sleep(1000)
 			else:
 				status = (info or {}).get('status', status)
 
 			if not info or status != 'downloaded' or not info.get('links'):
 				if status in _PENDING:
-					progress = (info or {}).get('progress', 0)
-					return _fail(torrent_id,
-								 'Not cached on Real-Debrid - it started downloading '
-								 '(%s%%). Pick another source.' % progress)
+					return _fail(torrent_id, _uncached_message(info))
 				if status == 'magnet_conversion':
 					return _fail(torrent_id,
 								 'Real-Debrid was still converting the magnet after %ss'
@@ -614,6 +626,15 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 			if torrent_id:
 				delete_torrent(torrent_id)
 			return None, 'Unexpected Real-Debrid error: %s' % exc
+
+
+def _uncached_message(info):
+	progress = (info or {}).get('progress', 0)
+	seeders = (info or {}).get('seeders')
+	detail = 'Not cached on Real-Debrid - it started downloading (%s%%)' % progress
+	if seeders is not None:
+		detail += ', %s seeders' % seeders
+	return detail + '. Trying the next source.'
 
 
 def _fail(torrent_id, reason):

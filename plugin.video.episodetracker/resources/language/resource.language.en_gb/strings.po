@@ -162,6 +162,10 @@ msgctxt "#32058"
 msgid "Mark movies watched at (%)"
 msgstr ""
 
+msgctxt "#32059"
+msgid "Give up on an uncached source after (seconds)"
+msgstr ""
+
 msgctxt "#32060"
 msgid "Lists"
 msgstr ""
