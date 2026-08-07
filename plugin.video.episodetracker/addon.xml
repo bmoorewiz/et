@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.3.0" provider-name="bmoorewiz">
+<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.3.1" provider-name="bmoorewiz">
 	<requires>
 		<import addon="xbmc.python" version="3.0.0" />
 		<import addon="script.module.requests" version="2.22.0" />
@@ -8,6 +8,10 @@
 	<extension point="xbmc.python.pluginsource" library="addon.py">
 		<provides>video</provides>
 	</extension>
+	<!-- Playback tracking must live in a service: the plugin process is torn
+	     down right after it resolves a URL, so a watcher started there is
+	     killed long before an episode finishes. -->
+	<extension point="xbmc.service" library="service.py" start="startup" />
 	<extension point="xbmc.addon.metadata">
 		<reuselanguageinvoker>false</reuselanguageinvoker>
 		<summary lang="en_GB">Track and watch your Trakt next episodes, and search TV shows and movies, via Real-Debrid.</summary>
@@ -20,6 +24,6 @@
 			<icon>resources/icon.png</icon>
 			<fanart>resources/fanart.png</fanart>
 		</assets>
-		<news>v1.3.0 - Failed playback now falls back by quality: 5 x 4K, then 5 x 1080p, then 10 x 720p, then stops.</news>
+		<news>v1.3.1 - Fixes shows and movies never being marked watched on Trakt: tracking now runs in a background service that survives playback.</news>
 	</extension>
 </addon>

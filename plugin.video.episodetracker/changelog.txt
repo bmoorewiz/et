@@ -1,3 +1,17 @@
+v1.3.1
+- Fixed items never being marked watched on Trakt. Playback tracking ran
+  in a thread started by the plugin, but Kodi destroys the plugin process
+  moments after it hands a URL over for playback and kills any thread
+  still running in it - long before an episode reaches 80%. So the stop
+  scrobble and the mark-watched never happened.
+  Tracking now runs in a background service that lives as long as Kodi
+  does. The plugin passes the item to it just before playback starts.
+- Playing an item to the very end now counts as 100% rather than whatever
+  the last progress sample happened to catch.
+- A notification confirms when something has been marked watched.
+
+  This needs Kodi restarted once after updating so the new service starts.
+
 v1.3.0
 - When a source fails to resolve, the fallback now works through a
   per-quality budget instead of a flat count: 5 x 4K, then 5 x 1080p,

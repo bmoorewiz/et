@@ -2,9 +2,7 @@
 """Playback: resolve a chosen source through Real-Debrid, play it, and
 scrobble progress back to Trakt."""
 
-import threading
 
-import xbmc
 import xbmcgui
 
 from resources.lib import control
@@ -203,79 +201,12 @@ def play(source, entry):
 	item.setArt({'icon': control.addon_icon, 'thumb': control.addon_icon,
 				 'fanart': control.addon_fanart})
 
-	control.resolve(item)
-
-	# Scrobble in the background so we don't block the resolved-url handoff.
+	# Hand the item to the background service BEFORE resolving. Kodi destroys
+	# this plugin process moments after setResolvedUrl(), so anything started
+	# here would be killed long before playback ends; the service outlives us
+	# and does the tracking.
 	if control.get_bool('scrobble.enabled', True) and trakt.authorized():
-		threading.Thread(target=_scrobble_monitor,
-						 args=(entry, resolved)).start()
+		from resources.lib import scrobbler
+		scrobbler.announce(entry)
 
-
-def _playing_file(player):
-	try:
-		return player.getPlayingFile() if player.isPlaying() else None
-	except Exception:
-		return None
-
-
-def _scrobble_monitor(entry, resolved_url=None):
-	"""Watch playback and send Trakt scrobble start/stop events.
-
-	The monitor binds to the file that is actually playing. Kodi keeps
-	isPlaying() true across consecutive items, so without this a monitor
-	would keep attributing a *different* video's progress to this entry.
-	"""
-	player = xbmc.Player()
-	monitor = xbmc.Monitor()
-
-	# Wait for playback to actually begin (up to 30s).
-	waited = 0
-	while not player.isPlaying() and waited < 30:
-		if monitor.waitForAbort(1):
-			return
-		waited += 1
-	if not player.isPlaying():
-		return
-
-	# Remember which file this monitor owns; stop when it changes or ends.
-	my_file = _playing_file(player)
-
-	started = False
-	last_percent = 0.0
-	try:
-		while player.isPlaying():
-			current_file = _playing_file(player)
-			if my_file and current_file and current_file != my_file:
-				break  # a different video started - this one has ended
-			try:
-				total = player.getTotalTime()
-				current = player.getTime()
-				percent = (current / total * 100) if total else 0.0
-				last_percent = percent
-				if not started and percent > 0:
-					trakt.scrobble(entry, 'start', percent)
-					started = True
-			except Exception:
-				pass
-			# Sample often enough that the final reading is close to where
-			# playback actually stopped - that value decides "watched".
-			if monitor.waitForAbort(5):
-				break
-	except Exception:
-		control.error('scrobble monitor failed')
-
-	# Playback ended - send a stop event and optionally mark watched.
-	try:
-		trakt.scrobble(entry, 'stop', last_percent)
-		threshold = watched_threshold(entry)
-		if last_percent >= threshold and control.get_bool('scrobble.markwatched', True):
-			# Trakt already marks it watched on a stop above 80%, but we also
-			# add to history explicitly so the next-up list advances at once.
-			control.log('marking watched at %.1f%% (threshold %d%%): %s'
-						% (last_percent, threshold, display_label(entry)))
-			trakt.add_to_history(entry)
-		else:
-			control.log('not marking watched, reached %.1f%% of %d%%: %s'
-						% (last_percent, threshold, display_label(entry)))
-	except Exception:
-		control.error('scrobble stop failed')
+	control.resolve(item)
