@@ -2,6 +2,8 @@
 """Central helpers: addon handles, settings, paths, dialogs and logging."""
 
 import sys
+import json
+import base64
 from urllib.parse import urlencode, parse_qsl
 
 import xbmc
@@ -110,6 +112,15 @@ def parse_params(query_string):
 	if query_string.startswith('?'):
 		query_string = query_string[1:]
 	return dict(parse_qsl(query_string))
+
+
+def encode_obj(obj):
+	"""Pack a dict into a URL-safe blob for a plugin:// parameter."""
+	return base64.urlsafe_b64encode(json.dumps(obj).encode('utf-8')).decode('ascii')
+
+
+def decode_obj(text):
+	return json.loads(base64.urlsafe_b64decode(text.encode('ascii')).decode('utf-8'))
 
 
 def notify(message, heading=None, icon=None, time=4000, sound=True):

@@ -270,6 +270,14 @@ msgctxt "#32106"
 msgid "Access token (private repos only)"
 msgstr ""
 
+msgctxt "#32110"
+msgid "Resume from your Trakt position"
+msgstr ""
+
+msgctxt "#32111"
+msgid "Offer the next episode when one finishes"
+msgstr ""
+
 msgctxt "#32080"
 msgid "Tools"
 msgstr ""
@@ -518,4 +526,48 @@ msgstr ""
 
 msgctxt "#33071"
 msgid "Playing via %s"
+msgstr ""
+
+msgctxt "#33072"
+msgid "Resume from %s?"
+msgstr ""
+
+msgctxt "#33073"
+msgid "Resume playback"
+msgstr ""
+
+msgctxt "#33074"
+msgid "Play the next episode?[CR][CR]%s"
+msgstr ""
+
+msgctxt "#33075"
+msgid "Up next"
+msgstr ""
+
+msgctxt "#33076"
+msgid "Hide show from Next Episodes"
+msgstr ""
+
+msgctxt "#33077"
+msgid "Hide \"%s\" from Next Episodes?[CR][CR]It stays in your Trakt history; it just stops appearing in the list."
+msgstr ""
+
+msgctxt "#33078"
+msgid "Hidden: %s"
+msgstr ""
+
+msgctxt "#33079"
+msgid "Hidden Shows"
+msgstr ""
+
+msgctxt "#33080"
+msgid "Unhidden: %s"
+msgstr ""
+
+msgctxt "#33081"
+msgid "No hidden shows."
+msgstr ""
+
+msgctxt "#33082"
+msgid "Shows you have hidden from Next Episodes. Select one to unhide it."
 msgstr ""

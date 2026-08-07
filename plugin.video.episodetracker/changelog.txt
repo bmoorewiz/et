@@ -1,3 +1,21 @@
+v1.7.0
+- Resume where you left off. Stop an episode or film part-way and the
+  next play offers to pick it up again, using the position Trakt already
+  keeps - so it also works if you stopped watching on your phone or on
+  another box. Choose Ask, Always or Never under Playback.
+- Pausing now tells Trakt, which is what creates that resume point in the
+  first place; previously only a full stop did.
+- Answering "no" to the resume prompt clears the old position, so
+  starting over really starts over.
+- When an episode finishes, Episode Tracker offers the next one from the
+  same show and plays it straight away. Turn it off with "Offer the next
+  episode when one finishes".
+- Hide a show from Next Episodes: pick "Hide show from Next Episodes"
+  from an episode's context menu. It stays in your Trakt history and
+  keeps its progress - it just stops crowding the list.
+- Hidden shows are listed under "Hidden Shows" on the main menu; select
+  one to unhide it, rather than having to go to the Trakt website.
+
 v1.6.0
 - Playback now tells you which debrid service served the stream. With
   both Real-Debrid and TorBox enabled there was previously no way to

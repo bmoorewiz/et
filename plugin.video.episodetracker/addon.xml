@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.6.0" provider-name="bmoorewiz">
+<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.7.0" provider-name="bmoorewiz">
 	<requires>
 		<import addon="xbmc.python" version="3.0.0" />
 		<import addon="script.module.requests" version="2.22.0" />
@@ -24,6 +24,6 @@
 			<icon>resources/icon.png</icon>
 			<fanart>resources/fanart.png</fanart>
 		</assets>
-		<news>v1.6.0 - Shows which debrid service is playing a stream, so you can tell Real-Debrid from TorBox when both are enabled.</news>
+		<news>v1.7.0 - Resume where you left off using your Trakt position, an offer to play the next episode when one finishes, and the option to hide a show from Next Episodes.</news>
 	</extension>
 </addon>

@@ -54,6 +54,8 @@
 		<setting id="sources.check_cache" type="bool" label="32054" default="true" />
 		<setting id="sources.only_cached" type="bool" label="32055" default="false" subsetting="true" enable="eq(-1,true)" />
 		<setting id="rd.cache_check_minutes" type="slider" label="32056" default="20" range="5,5,120" option="int" subsetting="true" enable="eq(-2,true)" />
+		<setting id="playback.resume" type="enum" label="32110" values="Ask|Always|Never" default="0" />
+		<setting id="playback.playnext" type="bool" label="32111" default="true" />
 		<setting id="scrobble.enabled" type="bool" label="32048" default="true" /><!-- Scrobble to Trakt -->
 		<setting id="scrobble.markwatched" type="bool" label="32049" default="true" subsetting="true" enable="eq(-1,true)" /><!-- Mark watched at end -->
 		<setting id="scrobble.threshold.episode" type="slider" label="32057" default="80" range="10,5,100" option="int" subsetting="true" enable="eq(-1,true)" />

@@ -508,6 +508,124 @@ def scrobble(entry, action, progress_percent):
 	_request('POST', '/scrobble/%s' % action, payload=payload)
 
 
+def _ids_match(stored_ids, entry):
+	"""Does a /sync/playback item refer to this entry?"""
+	wanted = _media_ref(entry)['ids']
+	for key, value in wanted.items():
+		if stored_ids.get(key) and stored_ids[key] == value:
+			return True
+	return False
+
+
+def playback_progress(entry):
+	"""Percentage watched of this item, per Trakt, or 0.
+
+	Trakt keeps a resume point whenever a scrobble stops below the watched
+	threshold, so this is what makes "carry on where you left off" work
+	across devices rather than only within one Kodi install.
+	"""
+	if not authorized():
+		return 0.0
+	path = '/sync/playback/movies' if is_movie(entry) else '/sync/playback/episodes'
+	items = _request('GET', path, params={'limit': 100}) or []
+	key = 'movie' if is_movie(entry) else 'episode'
+	for item in items:
+		media = item.get(key) or {}
+		if _ids_match(media.get('ids') or {}, entry):
+			try:
+				return float(item.get('progress') or 0)
+			except (TypeError, ValueError):
+				return 0.0
+	return 0.0
+
+
+def clear_playback(entry):
+	"""Drop Trakt's resume point once something has been finished."""
+	if not authorized():
+		return
+	path = '/sync/playback/movies' if is_movie(entry) else '/sync/playback/episodes'
+	items = _request('GET', path, params={'limit': 100}) or []
+	key = 'movie' if is_movie(entry) else 'episode'
+	for item in items:
+		media = item.get(key) or {}
+		if _ids_match(media.get('ids') or {}, entry) and item.get('id'):
+			_request('DELETE', '/sync/playback/%s' % item['id'])
+			return
+
+
+def hide_show(show_trakt_id):
+	"""Hide a show from progress, so it stops appearing in Next Episodes."""
+	if not authorized() or not show_trakt_id:
+		return False
+	payload = {'shows': [{'ids': {'trakt': show_trakt_id}}]}
+	result = _request('POST', '/users/hidden/progress_watched', payload=payload)
+	cache.delete('trakt_next_%s' % control.setting('trakt.user', 'me'))
+	return bool(result)
+
+
+def hidden_shows():
+	"""Shows currently hidden from progress, newest first.
+
+	Hiding is otherwise a one-way door - Trakt's own apps are the only place
+	to undo it - so the add-on lists them and offers to put them back.
+	"""
+	if not authorized():
+		return []
+	items = _request('GET', '/users/hidden/progress_watched',
+					 params={'type': 'show', 'limit': 100})
+	if not isinstance(items, list):
+		return []
+	shows = []
+	for item in items:
+		show = item.get('show') or {}
+		ids = show.get('ids') or {}
+		if not ids.get('trakt'):
+			continue
+		shows.append({
+			'media_type': 'episode',
+			'show_title': show.get('title', ''),
+			'show_year': show.get('year'),
+			'show_trakt': ids.get('trakt'),
+			'show_slug': ids.get('slug'),
+			'show_imdb': ids.get('imdb'),
+			'show_tvdb': ids.get('tvdb'),
+			'show_tmdb': ids.get('tmdb'),
+		})
+	return shows
+
+
+def unhide_show(show_trakt_id):
+	if not authorized() or not show_trakt_id:
+		return False
+	payload = {'shows': [{'ids': {'trakt': show_trakt_id}}]}
+	result = _request('POST', '/users/hidden/progress_watched/remove',
+					  payload=payload)
+	cache.delete('trakt_next_%s' % control.setting('trakt.user', 'me'))
+	return bool(result)
+
+
+def next_episode_after(entry):
+	"""The next unwatched episode of this entry's show, or None.
+
+	Asked of Trakt after the current episode is marked watched, so it
+	reflects what was just finished.
+	"""
+	show_id = entry.get('show_trakt') or entry.get('show_slug')
+	if not show_id or is_movie(entry):
+		return None
+	progress = _show_progress(show_id)
+	show = {
+		'title': entry.get('show_title', ''),
+		'year': entry.get('show_year'),
+		'ids': {
+			'trakt': entry.get('show_trakt'), 'slug': entry.get('show_slug'),
+			'imdb': entry.get('show_imdb'), 'tvdb': entry.get('show_tvdb'),
+			'tmdb': entry.get('show_tmdb'),
+		},
+	}
+	return _build_entry(show, progress)
+
+
 def add_to_history(entry):
 	"""Mark an episode or movie watched by adding it to the Trakt history."""
 	if not authorized():

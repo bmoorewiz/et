@@ -3,6 +3,8 @@
 scrobble progress back to Trakt."""
 
 
+import time
+
 import xbmcgui
 
 from resources.lib import control
@@ -88,6 +90,53 @@ def _resolve_one(source, entry):
 		title = entry.get('show_title', '')
 	return debrid.resolve_magnet(
 		_magnet_for(source), source.get('hash', ''), season, episode, title)
+
+
+def runtime_seconds(entry):
+	try:
+		return int(entry.get('runtime') or 0) * 60
+	except (TypeError, ValueError):
+		return 0
+
+
+def _apply_resume(entry):
+	"""Ask about, and record, a Trakt resume point for this item.
+
+	Trakt stores progress as a percentage, so the second count is derived
+	from the item's runtime - close enough to land in the right place, and
+	the only option since the real file duration is unknown until playback
+	starts. The decision is stashed for the service to apply.
+	"""
+	mode = control.get_int('playback.resume', 0)  # 0 ask, 1 always, 2 never
+	if mode == 2:
+		return
+	try:
+		percent = trakt.playback_progress(entry)
+	except Exception:
+		control.error('resume lookup failed')
+		return
+	# Ignore the extremes: barely started, or effectively finished.
+	if percent < 1 or percent > 95:
+		return
+	total = runtime_seconds(entry)
+	if not total:
+		return
+	seconds = int(total * percent / 100.0)
+
+	if mode == 0:
+		label = time.strftime('%H:%M:%S', time.gmtime(seconds))
+		if not control.yesno_dialog(control.langf(33072, label),
+									heading=control.lang(33073)):
+			# Starting over should not leave a stale resume point behind.
+			try:
+				trakt.clear_playback(entry)
+			except Exception:
+				pass
+			return
+	control.log('resuming %s at %.1f%% (~%ds)'
+				% (display_label(entry), percent, seconds))
+	from resources.lib import scrobbler
+	scrobbler.announce_resume(percent, seconds)
 
 
 def provider_tag(name):
@@ -202,6 +251,12 @@ def play(source, entry):
 	if provider and control.get_bool('playback.show_provider', True):
 		control.notify(control.langf(33071, provider))
 
+	# Resuming is done by the service, so only offer it when the service will
+	# be watching this playback - otherwise the prompt would have no effect.
+	tracked = control.get_bool('scrobble.enabled', True) and trakt.authorized()
+	if tracked:
+		_apply_resume(entry)
+
 	item = xbmcgui.ListItem(path=resolved)
 	label = display_label(entry)
 	if provider and control.get_bool('playback.label_provider', False):
@@ -220,7 +275,7 @@ def play(source, entry):
 	# this plugin process moments after setResolvedUrl(), so anything started
 	# here would be killed long before playback ends; the service outlives us
 	# and does the tracking.
-	if control.get_bool('scrobble.enabled', True) and trakt.authorized():
+	if tracked:
 		from resources.lib import scrobbler
 		scrobbler.announce(entry)
 

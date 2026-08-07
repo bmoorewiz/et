@@ -2,8 +2,6 @@
 """Request router: maps plugin:// actions to behaviour and builds menus."""
 
 import sys
-import json
-import base64
 
 import xbmc
 
@@ -17,12 +15,9 @@ from resources.lib import updater
 from resources.lib import debrid
 
 
-def _encode(obj):
-	return base64.urlsafe_b64encode(json.dumps(obj).encode('utf-8')).decode('ascii')
-
-
-def _decode(text):
-	return json.loads(base64.urlsafe_b64decode(text.encode('ascii')).decode('utf-8'))
+# Shared with the service, which builds the same play-next callback URLs.
+_encode = control.encode_obj
+_decode = control.decode_obj
 
 
 def dispatch():
@@ -40,6 +35,12 @@ def dispatch():
 		return player.play(payload['source'], payload['entry'])
 	if action == 'mark_watched':
 		return mark_watched(_decode(params['entry']))
+	if action == 'hide_show':
+		return hide_show(_decode(params['entry']))
+	if action == 'hidden_shows':
+		return hidden_shows_menu()
+	if action == 'unhide_show':
+		return unhide_show(_decode(params['entry']))
 	if action == 'search_shows':
 		return search_menu('show')
 	if action == 'search_movies':
@@ -110,6 +111,13 @@ def main_menu():
 		control.lang(33051), {'action': 'search_movies'},
 		art={'icon': control.addon_icon}, info={'plot': control.lang(33051)})
 
+	if trakt.authorized():
+		# Hiding is otherwise only undoable on Trakt's own site, so keep a way
+		# back within reach of the list it removes shows from.
+		control.add_directory_item(
+			control.lang(33079), {'action': 'hidden_shows'},
+			art={'icon': control.addon_icon}, info={'plot': control.lang(33082)})
+
 	if not trakt.authorized():
 		control.add_directory_item(
 			'[COLOR orange]%s[/COLOR]' % control.lang(33004),
@@ -169,9 +177,13 @@ def _add_episode_item(entry, autoplay):
 		(control.lang(33022),
 		 'RunPlugin(%s)' % control.build_url(
 			 {'action': 'mark_watched', 'entry': encoded})),
-		(control.lang(33002),
-		 'Container.Refresh'),
 	]
+	if entry.get('show_trakt'):
+		context.append(
+			(control.lang(33076),
+			 'RunPlugin(%s)' % control.build_url(
+				 {'action': 'hide_show', 'entry': encoded})))
+	context.append((control.lang(33002), 'Container.Refresh'))
 	action = 'autoplay' if autoplay else 'sources'
 	control.add_directory_item(
 		label,
@@ -436,6 +448,48 @@ def mark_watched(entry):
 		xbmc.executebuiltin('Container.Refresh')
 	else:
 		control.notify(33018)
+
+
+def hide_show(entry):
+	"""Hide this show from Trakt's progress, and so from Next Episodes."""
+	title = entry.get('show_title', '')
+	if not control.yesno_dialog(control.langf(33077, title),
+								heading=control.lang(33076)):
+		return
+	if trakt.hide_show(entry.get('show_trakt')):
+		control.notify(control.langf(33078, title))
+		xbmc.executebuiltin('Container.Refresh')
+	else:
+		control.notify(33018)
+
+
+def unhide_show(entry):
+	if trakt.unhide_show(entry.get('show_trakt')):
+		control.notify(control.langf(33080, entry.get('show_title', '')))
+		xbmc.executebuiltin('Container.Refresh')
+	else:
+		control.notify(33018)
+
+
+def hidden_shows_menu():
+	shows = trakt.hidden_shows()
+	if not shows:
+		control.add_directory_item(control.lang(33081),
+								   {'action': 'refresh'}, is_folder=False)
+		control.end_directory(cache_to_disc=False, content='')
+		return
+	for show in shows:
+		year = show.get('show_year')
+		label = '%s (%s)' % (show.get('show_title', ''), year) if year \
+			else show.get('show_title', '')
+		control.add_directory_item(
+			label,
+			{'action': 'unhide_show', 'entry': _encode(show)},
+			is_folder=False,
+			art={'icon': control.addon_icon},
+			info={'mediatype': 'tvshow', 'title': show.get('show_title', ''),
+				  'plot': control.lang(33082)})
+	control.end_directory(cache_to_disc=False, content='tvshows')
 
 
 def _auth(fn):
