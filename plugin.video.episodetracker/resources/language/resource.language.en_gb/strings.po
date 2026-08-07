@@ -284,11 +284,11 @@ msgid "Diagnostics"
 msgstr ""
 
 msgctxt "#32085"
-msgid "GitHub token (gist scope only)"
+msgid "Diagnostics upload"
 msgstr ""
 
 msgctxt "#32086"
-msgid "Upload logs to GitHub"
+msgid "Upload logs for support"
 msgstr ""
 
 msgctxt "#33000"
@@ -497,7 +497,7 @@ msgid "Collecting and redacting logs..."
 msgstr ""
 
 msgctxt "#33061"
-msgid "Uploaded. Share this link:[CR][CR]%s"
+msgid "Uploaded. Share this link:[CR][CR]%s[CR][CR]The log has been scrubbed of tokens."
 msgstr ""
 
 msgctxt "#33062"

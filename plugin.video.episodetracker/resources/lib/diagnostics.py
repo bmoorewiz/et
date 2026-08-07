@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
-"""Collect a troubleshooting report and upload it to GitHub as a secret gist.
+"""Collect a troubleshooting report and upload it for sharing.
 
-Two things matter here more than the upload itself:
+Uploads go to paste.kodi.tv, Kodi's own paste service, which accepts
+anonymous posts. That is deliberate: it needs no account and no token, so
+nothing secret has to be stored on the device or shipped inside the add-on.
+Any credential embedded in a distributed add-on is readable by everyone who
+installs it.
 
-* Kodi's log is written by Kodi and every other add-on, not just this one,
-  and it routinely contains credentials - Real-Debrid puts its token in the
-  query string of every request, so any logged URL or traceback carries it.
-  Lines written before the redaction added in v1.0.8 are still in old logs.
-  Everything is therefore scrubbed here again, including a literal match on
-  the tokens this install actually holds, before a single byte leaves the
-  device.
-* The upload uses the user's own GitHub token with gist scope only. Shipping
-  a shared token in a public add-on would hand write access to anybody who
-  unzipped it.
+The part that matters more than the upload: Kodi's log is written by Kodi
+and every other add-on, not just this one, and it routinely contains
+credentials - Real-Debrid and TorBox both put their token in requests, so
+any logged URL or traceback can carry one, and lines written before the
+redaction added in v1.0.8 are still in older logs. Everything is therefore
+scrubbed here, by pattern and by literal match against the tokens this
+install actually holds, before a single byte leaves the device.
 """
 
 import json
@@ -28,7 +29,8 @@ import xbmcvfs
 
 from resources.lib import control
 
-GIST_API = 'https://api.github.com/gists'
+PASTE_API = 'https://paste.kodi.tv/documents'
+PASTE_VIEW = 'https://paste.kodi.tv/%s'
 # Enough log to see a whole playback attempt without producing a gist nobody
 # can read. Taken from the end, which is where the interesting part is.
 MAX_LOG_BYTES = 512 * 1024
@@ -37,7 +39,10 @@ MAX_LOG_BYTES = 512 * 1024
 _SECRET_SETTINGS = (
 	'trakt.token', 'trakt.refresh', 'trakt.client_secret', 'trakt.client_id',
 	'rd.token', 'rd.refresh', 'rd.client_id', 'rd.client_secret',
-	'updates.token', 'logs.github_token', 'torbox.api_key',
+	'updates.token', 'torbox.api_key',
+	# The GitHub upload token was removed in v1.5.1, but an install that
+	# saved one still has the value on disk - keep scrubbing it.
+	'logs.github_token',
 )
 # Settings worth seeing in full when diagnosing behaviour.
 _REPORTED_SETTINGS = (
@@ -180,45 +185,34 @@ def collect():
 
 
 def upload(report=None):
-	"""Create a secret gist. Returns ``(url, error)``."""
-	token = control.setting('logs.github_token', '')
-	if not token:
-		return None, ('No GitHub token set. Create one at '
-					  'github.com/settings/tokens with only the "gist" scope, '
-					  'then paste it into Settings > Tools.')
-	report = report if report is not None else collect()
-	filename = 'episodetracker-%s.log' % time.strftime('%Y%m%d-%H%M%S')
-	payload = {
-		'description': 'Episode Tracker diagnostics v%s' % control.addon_version,
-		'public': False,
-		'files': {filename: {'content': report}},
-	}
-	try:
-		resp = requests.post(GIST_API, json=payload, timeout=60, headers={
-			'Authorization': 'Bearer %s' % token,
-			'Accept': 'application/vnd.github+json',
-			'X-GitHub-Api-Version': '2022-11-28',
-			'User-Agent': 'plugin.video.episodetracker',
-		})
-	except Exception as exc:
-		control.error('gist upload failed')
-		return None, 'Could not reach GitHub: %s' % exc
+	"""Post the report to paste.kodi.tv. Returns ``(url, error)``.
 
-	if resp.status_code == 201:
-		try:
-			return resp.json().get('html_url'), None
-		except ValueError:
-			return None, 'GitHub returned an unreadable response'
-	if resp.status_code == 401:
-		return None, 'GitHub rejected the token (401). Check it has the "gist" scope.'
-	if resp.status_code == 403:
-		# GitHub answers 403 for an unusable token as well as for rate limits.
-		return None, ('GitHub refused the upload (403). The token is missing, '
-					  'invalid, or lacks the "gist" scope - or you have hit a '
-					  'rate limit.')
-	detail = ''
+	No account or token: the service takes anonymous posts, so there is
+	nothing to configure and nothing secret to ship.
+	"""
+	report = report if report is not None else collect()
 	try:
-		detail = resp.json().get('message', '')
-	except ValueError:
-		pass
-	return None, 'GitHub returned HTTP %s %s' % (resp.status_code, detail)
+		resp = requests.post(
+			PASTE_API,
+			data=report.encode('utf-8'),
+			timeout=90,
+			headers={'Content-Type': 'text/plain; charset=utf-8',
+					 'User-Agent': 'plugin.video.episodetracker'})
+	except Exception as exc:
+		control.error('paste upload failed')
+		return None, 'Could not reach paste.kodi.tv: %s' % exc
+
+	if resp.status_code in (200, 201):
+		try:
+			key = resp.json().get('key')
+		except ValueError:
+			return None, 'paste.kodi.tv returned an unreadable response'
+		if key:
+			return PASTE_VIEW % key, None
+		return None, 'paste.kodi.tv did not return a paste id'
+	if resp.status_code == 413:
+		return None, ('The report was too large for paste.kodi.tv. '
+					  'Clear the Kodi log and reproduce the problem first.')
+	if resp.status_code == 429:
+		return None, 'paste.kodi.tv is rate limiting; try again in a minute.'
+	return None, 'paste.kodi.tv returned HTTP %s' % resp.status_code

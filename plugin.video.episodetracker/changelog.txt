@@ -1,3 +1,16 @@
+v1.5.1
+- "Upload logs for support" now posts to paste.kodi.tv, Kodi's own paste
+  service, which accepts anonymous uploads. There is nothing to set up:
+  press the button and share the link.
+- The GitHub token setting has been removed. Uploading via GitHub needed a
+  write-capable token, and a token shipped inside an add-on is readable by
+  everyone who installs it, while a per-device one meant setup on every
+  box. An anonymous paste needs neither.
+- A token saved by an earlier version is still scrubbed from reports, so
+  a leftover value cannot be uploaded.
+- Redaction is unchanged and still covers Real-Debrid, TorBox, Trakt and
+  GitHub credentials, by pattern and by exact value.
+
 v1.5.0
 - Added TorBox as a debrid provider alongside Real-Debrid. Enable it and
   paste your API key under Settings > Accounts.
