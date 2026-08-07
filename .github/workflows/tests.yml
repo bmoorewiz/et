@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Kodi 19 ships Python 3.8; newer builds run 3.11+. The add-on has
+        # to work on both, so the suite runs on both.
+        python-version: ['3.8', '3.11']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # Kodi supplies this as script.module.requests; the add-on declares it
+      # in addon.xml and imports it at module level, so the suite needs it
+      # importable even though every request is faked.
+      - name: Install the one runtime dependency
+        run: python3 -m pip install --quiet requests
+
+      - name: Run the test suite
+        run: python3 tests/run.py -v

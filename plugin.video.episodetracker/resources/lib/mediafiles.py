@@ -12,6 +12,8 @@ handles that a plain "endswith a video extension" check does not:
   unrecognised container costs a guess rather than the whole playback.
 """
 
+import re
+
 from resources.lib import control
 
 VIDEO_EXTENSIONS = (
@@ -21,6 +23,10 @@ VIDEO_EXTENSIONS = (
 	'.dat', '.img',
 )
 ARCHIVE_EXTENSIONS = ('.rar', '.zip', '.7z', '.tar', '.gz', '.bz2', '.001')
+# Old-style split RAR sets name their parts .r00, .r01, ... - only the first
+# part carries the .rar extension, so without this a multi-part release looks
+# like a pile of unrecognised files rather than an archive.
+_SPLIT_ARCHIVE = re.compile(r'\.r\d{2,3}$|\.\d{3}$', re.I)
 # Anything smaller than this is a sample, subtitle, artwork or readme.
 MIN_VIDEO_BYTES = 64 * 1024 * 1024
 
@@ -58,7 +64,8 @@ def is_video(entry):
 
 
 def is_archive(entry):
-	return name_of(entry).lower().endswith(ARCHIVE_EXTENSIONS)
+	name = name_of(entry).lower()
+	return name.endswith(ARCHIVE_EXTENSIONS) or bool(_SPLIT_ARCHIVE.search(name))
 
 
 def describe(files, limit=12):

@@ -1,3 +1,16 @@
+v1.7.1
+- Added a proper test suite to the repository (366 tests, no dependencies
+  beyond Python itself). It runs either side of every build, so a version
+  bump can no longer ship a zip containing different code - which had
+  happened twice - and a missing string or setting is caught before it
+  reaches a screen.
+- A source whose provider reports a non-numeric seeder count no longer
+  discards the entire source list.
+- Multi-part RAR releases (.r00, .r01) are now recognised as archives, so
+  the reason a source will not play is reported accurately.
+- Signing out of TorBox now also drops the cached account status, so a
+  re-entered key is judged on its own merits rather than the old key's.
+
 v1.7.0
 - Resume where you left off. Stop an episode or film part-way and the
   next play offers to pick it up again, using the position Trakt already

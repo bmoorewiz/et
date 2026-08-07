@@ -265,6 +265,19 @@ def annotate_cached(sources):
 	return sources, True
 
 
+def _number(value, default=0):
+	"""Coerce a provider-supplied number, which is not always a number.
+
+	Providers are third-party code; seeders and size arrive as ints, strings,
+	None, and occasionally something like 'lots'. Anything unparseable has to
+	sort as zero rather than take the whole source list down with it.
+	"""
+	try:
+		return float(value)
+	except (TypeError, ValueError):
+		return default
+
+
 def _filter_and_rank(items):
 	allowed = set()
 	if control.get_bool('quality.4k', True):
@@ -287,18 +300,15 @@ def _filter_and_rank(items):
 		quality = item.get('quality', 'SD')
 		if quality not in allowed:
 			continue
-		try:
-			seeders = int(item.get('seeders', 0) or 0)
-		except (ValueError, TypeError):
-			seeders = 0
+		seeders = _number(item.get('seeders'))
 		if min_seeders and seeders and seeders < min_seeders:
 			continue
 		filtered.append(item)
 
 	filtered.sort(key=lambda i: (
 		_QUALITY_RANK.get(i.get('quality', 'SD'), 0),
-		int(i.get('seeders', 0) or 0),
-		float(i.get('size', 0) or 0),
+		_number(i.get('seeders')),
+		_number(i.get('size')),
 	), reverse=True)
 
 	limit = control.get_int('results.limit', 150)

@@ -282,5 +282,7 @@ def _fail(torrent_id, reason):
 
 def revoke():
 	control.set_setting('torbox.api_key', '')
-	control.set_setting('torbox.user', '')
+	# The account status is cached for an hour; without clearing it, a
+	# re-entered key would be judged on the old key's answer.
+	cache.delete('torbox_account_status')
 	cache.delete('torbox_account_status')
