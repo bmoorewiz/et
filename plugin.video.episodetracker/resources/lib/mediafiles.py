@@ -10,6 +10,13 @@ handles that a plain "endswith a video extension" check does not:
   code knows, or wrap it in an archive. Failing outright on those is worse
   than falling back to the obvious candidate - the biggest file - so an
   unrecognised container costs a guess rather than the whole playback.
+
+That fallback needs a floor under it. Fake releases pad a torrent with one
+large file named exactly like a real one and give it an executable
+extension; "the biggest file" picks it every time. Handing that to Kodi
+fails to play at best, and at worst resolves malware to a public download
+URL, so anything that is definitely not video is refused outright rather
+than guessed at.
 """
 
 import re
@@ -27,6 +34,25 @@ ARCHIVE_EXTENSIONS = ('.rar', '.zip', '.7z', '.tar', '.gz', '.bz2', '.001')
 # part carries the .rar extension, so without this a multi-part release looks
 # like a pile of unrecognised files rather than an archive.
 _SPLIT_ARCHIVE = re.compile(r'\.r\d{2,3}$|\.\d{3}$', re.I)
+
+# Never playable, and never worth guessing at. Executables and scripts lead
+# the list because that is what fake releases use: a single 1.2 GB
+# "Movie.2026.2160p.exe" is not a mislabelled video, it is malware wearing a
+# release name, and the largest-file fallback would otherwise resolve it to a
+# direct download link and hand it to the user.
+BLOCKED_EXTENSIONS = (
+	# executables and installers
+	'.exe', '.msi', '.com', '.scr', '.dll', '.sys', '.apk', '.app', '.dmg',
+	'.pkg', '.deb', '.rpm', '.jar', '.appimage',
+	# scripts and shortcuts
+	'.bat', '.cmd', '.ps1', '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh',
+	'.hta', '.sh', '.lnk', '.url', '.reg', '.desktop',
+	# metadata, artwork and subtitles - real, just not the feature
+	'.txt', '.nfo', '.srt', '.sub', '.idx', '.ass', '.ssa', '.smi', '.vtt',
+	'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.pdf', '.htm',
+	'.html', '.torrent', '.md5', '.sfv', '.par2', '.ini', '.db', '.log',
+	'.diz', '.srr',
+)
 # Anything smaller than this is a sample, subtitle, artwork or readme.
 MIN_VIDEO_BYTES = 64 * 1024 * 1024
 
@@ -68,6 +94,11 @@ def is_archive(entry):
 	return name.endswith(ARCHIVE_EXTENSIONS) or bool(_SPLIT_ARCHIVE.search(name))
 
 
+def is_blocked(entry):
+	"""Definitely not video, whatever the file is called."""
+	return name_of(entry).lower().endswith(BLOCKED_EXTENSIONS)
+
+
 def describe(files, limit=12):
 	"""A short listing for the log, so a rejection can be diagnosed."""
 	parts = []
@@ -88,14 +119,18 @@ def playable_candidates(files):
 	if not files:
 		return [], 'the torrent has no files'
 
-	videos = [f for f in files if is_video(f)]
+	# Files that are definitely not video are out of the running entirely -
+	# they must not be picked by extension or by the size fallback below.
+	usable = [f for f in files if not is_blocked(f)]
+
+	videos = [f for f in usable if is_video(f)]
 	if videos:
 		videos.sort(key=size_of, reverse=True)
 		return videos, ''
 
 	# Nothing matched by extension. Rather than give up, take the biggest
 	# file if it is plausibly a video by size alone.
-	sizeable = [f for f in files if size_of(f) >= MIN_VIDEO_BYTES]
+	sizeable = [f for f in usable if size_of(f) >= MIN_VIDEO_BYTES]
 	sizeable.sort(key=size_of, reverse=True)
 	if sizeable:
 		if all(is_archive(f) for f in sizeable):
@@ -105,6 +140,14 @@ def playable_candidates(files):
 		return sizeable, ('no file had a known video extension, falling back '
 						  'to the largest (%s)' % basename(sizeable[0]))
 
+	# Nothing left. If what was filtered out was a big executable dressed up
+	# with a release name, say so plainly - it is a fake, not a near miss.
+	decoys = sorted((f for f in files
+					 if is_blocked(f) and size_of(f) >= MIN_VIDEO_BYTES),
+					key=size_of, reverse=True)
+	if decoys:
+		return [], ('fake release - the only large file is %s, which is not '
+					'a video' % basename(decoys[0]))
 	if any(is_archive(f) for f in files):
 		return [], 'the torrent contains only archives, not a playable video'
 	return [], 'the torrent contains no file big enough to be a video'

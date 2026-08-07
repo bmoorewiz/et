@@ -81,14 +81,31 @@ def cached_hashes(hashes):
 	return mapping, usable
 
 
-def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
-	"""Try each enabled provider in order.
+def order_for(source_cached_by):
+	"""Enabled providers, with the ones holding this source cached first.
+
+	The source list already knows who has a given torrent - that is what the
+	[RD+]/[TB+] flags mean - so starting with anyone else contradicts what
+	the user just picked, and spends the attempt on a provider that would
+	have to download the torrent from scratch. Providers that reported no
+	cache information still get their turn, just afterwards.
+	"""
+	names = providers()
+	if not source_cached_by:
+		return names
+	holders = [n for n in names if n in source_cached_by]
+	return holders + [n for n in names if n not in holders]
+
+
+def resolve_magnet(magnet, info_hash, season=None, episode=None, title='',
+				   cached_by=None):
+	"""Try each enabled provider, whoever has it cached first.
 
 	Returns ``(url, error, provider)``. The provider name is carried back
 	rather than only logged, so the caller can tell the user which service
 	is actually serving the stream when both are enabled.
 	"""
-	names = providers()
+	names = order_for(cached_by)
 	if not names:
 		return None, 'No debrid provider is set up.', None
 	errors = []

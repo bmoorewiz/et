@@ -81,6 +81,10 @@ def _resolve_one(source, entry):
 
 	Movies pass no season/episode, so Real-Debrid falls through to picking
 	the largest video file in the torrent rather than episode-matching.
+
+	The source's cache flags decide which provider is asked first, so the
+	service that is named when playback starts is the one the source list
+	said had it.
 	"""
 	if is_movie(entry):
 		season, episode, title = None, None, entry.get('title', '')
@@ -89,7 +93,8 @@ def _resolve_one(source, entry):
 		episode = entry.get('episode')
 		title = entry.get('show_title', '')
 	return debrid.resolve_magnet(
-		_magnet_for(source), source.get('hash', ''), season, episode, title)
+		_magnet_for(source), source.get('hash', ''), season, episode, title,
+		cached_by=source.get('cached_by'))
 
 
 def runtime_seconds(entry):

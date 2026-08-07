@@ -8,6 +8,8 @@ Produces the standard layout Kodi expects:
       addons.xml.md5             checksum Kodi uses to detect changes
       index.html                 plain-anchor index so Kodi can browse it
       <addon.id>/<addon.id>-<version>.zip
+      <addon.id>/<asset path>    icon and fanart, at the same relative path
+                                 the add-on's <assets> block declares
 
 Run from the repo root:  python3 tools/build_repo.py
 """
@@ -61,6 +63,31 @@ def build_zip(addon_id, version):
 	return dest
 
 
+def copy_assets(addon_id, root):
+	"""Publish icon/fanart next to the zip, where Kodi looks for them.
+
+	Kodi's add-on browser fetches <datadir>/<addon id>/<the path in the
+	<assets> block>, not the copy inside the zip - so without these the
+	repository listing shows a blank tile and the log fills with 404s.
+	Returns the relative paths written.
+	"""
+	written = []
+	for asset in root.findall('./extension/assets/*'):
+		relative = (asset.text or '').strip()
+		if not relative:
+			continue
+		source = os.path.join(ROOT, addon_id, relative)
+		if not os.path.exists(source):
+			print('  WARNING: %s declares %s, which does not exist'
+				  % (addon_id, relative))
+			continue
+		dest = os.path.join(DOCS, addon_id, relative)
+		os.makedirs(os.path.dirname(dest), exist_ok=True)
+		shutil.copyfile(source, dest)
+		written.append(relative)
+	return written
+
+
 def build_addons_xml(entries):
 	"""Concatenate each add-on's manifest into a single addons.xml."""
 	parts = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>', '<addons>']
@@ -105,6 +132,7 @@ def main():
 	for addon_id in ADDONS:
 		root, version = addon_meta(addon_id)
 		dest = build_zip(addon_id, version)
+		copy_assets(addon_id, root)
 		size = os.path.getsize(dest)
 		roots.append(root)
 		items.append((addon_id, version, size))

@@ -97,6 +97,69 @@ class Candidates(AddonTestCase):
 		self.assertEqual(mediafiles.basename(candidates[0]), 'feature.mkv')
 
 
+class FakeReleases(AddonTestCase):
+	"""A single large executable wearing a release name.
+
+	Taken from a real failure: a torrent flagged 4K whose only file was
+	"The Odyssey (2026) 2160p FULL HD.exe" at 1200.6 MB. The largest-file
+	fallback picked it, Real-Debrid resolved it to a public download URL,
+	and Kodi was handed a Windows executable to demux.
+	"""
+
+	def test_the_reported_torrent_is_refused(self):
+		files = [video('The Odyssey (2026) 2160p FULL HD.exe', 1200)]
+		candidates, note = mediafiles.playable_candidates(files)
+		self.assertEqual(candidates, [])
+		self.assertIn('fake release', note)
+		self.assertIn('.exe', note)
+
+	def test_pick_refuses_it_too(self):
+		files = [video('The Odyssey (2026) 2160p FULL HD.exe', 1200)]
+		entry, error = mediafiles.pick(files, None, None, None)
+		self.assertIsNone(entry, 'an executable must never be handed to Kodi')
+		self.assertIn('fake release', error)
+
+	def test_no_executable_is_ever_a_candidate(self):
+		for extension in ('.exe', '.msi', '.scr', '.com', '.bat', '.cmd',
+						  '.ps1', '.vbs', '.js', '.jar', '.apk', '.dmg',
+						  '.lnk', '.sh', '.reg'):
+			files = [video('Movie.2026.2160p' + extension, 1200)]
+			candidates, _note = mediafiles.playable_candidates(files)
+			self.assertEqual(candidates, [], extension)
+
+	def test_metadata_files_are_not_candidates_either(self):
+		for extension in ('.txt', '.nfo', '.srt', '.jpg', '.html', '.sfv'):
+			self.assertTrue(mediafiles.is_blocked({'path': 'file' + extension}),
+							extension)
+
+	def test_a_real_video_alongside_a_decoy_still_plays(self):
+		files = [video('Movie.2026.2160p.exe', 1200),
+				 video('Movie.2026.2160p.mkv', 900)]
+		candidates, note = mediafiles.playable_candidates(files)
+		self.assertEqual(len(candidates), 1)
+		self.assertEqual(mediafiles.basename(candidates[0]), 'Movie.2026.2160p.mkv')
+		self.assertEqual(note, '')
+
+	def test_the_size_fallback_skips_the_decoy(self):
+		# Unrecognised container plus a bigger executable: the fallback must
+		# take the container, not the biggest file.
+		files = [video('Movie.2026.2160p.exe', 4000),
+				 video('Movie.2026.2160p.unknowncontainer', 1200)]
+		candidates, note = mediafiles.playable_candidates(files)
+		self.assertEqual(mediafiles.basename(candidates[0]),
+						 'Movie.2026.2160p.unknowncontainer')
+		self.assertIn('falling back', note)
+
+	def test_a_subtitle_is_never_mistaken_for_the_feature(self):
+		files = [video('Movie.2026.srt', 200)]
+		candidates, _note = mediafiles.playable_candidates(files)
+		self.assertEqual(candidates, [])
+
+	def test_no_video_extension_is_also_on_the_blocked_list(self):
+		overlap = set(mediafiles.VIDEO_EXTENSIONS) & set(mediafiles.BLOCKED_EXTENSIONS)
+		self.assertEqual(overlap, set())
+
+
 def matcher(season, episode, path):
 	return 's%02de%02d' % (int(season), int(episode)) in path.lower()
 

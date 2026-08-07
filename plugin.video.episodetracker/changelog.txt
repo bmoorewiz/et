@@ -1,3 +1,20 @@
+v1.7.2
+- Fixed playback failing on fake releases. Some torrents contain a single
+  large file named exactly like a real release but ending in .exe - it is
+  malware, not a mislabelled video. The "fall back to the largest file"
+  rule picked it, resolved it to a direct download link and handed it to
+  Kodi, which could not play it. Executables, installers, scripts and
+  shortcuts are now refused outright, so the add-on moves on to the next
+  source instead of failing, and never resolves one to a download URL.
+- Playback now uses the service that the source list says has the torrent
+  cached. A source flagged [TB+] was still being sent to Real-Debrid
+  first, so playback announced "Playing via Real-Debrid" and contradicted
+  the flag you picked from. Whoever holds it cached is asked first; the
+  other provider still gets a turn if that fails.
+- The add-on's icon and fanart are now published alongside the zip in the
+  repository, so the Kodi add-on browser shows artwork instead of a blank
+  tile.
+
 v1.7.1
 - Added a proper test suite to the repository (366 tests, no dependencies
   beyond Python itself). It runs either side of every build, so a version

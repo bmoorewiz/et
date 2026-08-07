@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.7.1" provider-name="bmoorewiz">
+<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.7.2" provider-name="bmoorewiz">
 	<requires>
 		<import addon="xbmc.python" version="3.0.0" />
 		<import addon="script.module.requests" version="2.22.0" />
@@ -24,6 +24,6 @@
 			<icon>resources/icon.png</icon>
 			<fanart>resources/fanart.png</fanart>
 		</assets>
-		<news>v1.7.1 - Adds a committed test suite that runs on every build, plus fixes for non-numeric seeder counts, multi-part archive detection, and the cached TorBox account status.</news>
+		<news>v1.7.2 - Refuses fake releases that are really an executable, and plays through whichever debrid service the source list says has the torrent cached.</news>
 	</extension>
 </addon>

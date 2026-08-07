@@ -155,6 +155,20 @@ class RepositoryAddon(AddonTestCase):
 		self.assertTrue(os.path.exists(os.path.join(
 			ROOT, 'docs', ADDON_ID, '%s-%s.zip' % (ADDON_ID, version))))
 
+	def test_the_declared_assets_are_published_beside_the_zip(self):
+		# Kodi's add-on browser fetches <datadir>/<id>/<asset path>, not the
+		# copy inside the zip. Without these the listing shows a blank tile
+		# and the Kodi log fills with 404s.
+		for addon_id in (ADDON_ID, REPO_ID):
+			manifest = read(os.path.join(ROOT, addon_id, 'addon.xml'))
+			assets = re.findall(r'<(?:icon|fanart)>([^<]+)</(?:icon|fanart)>',
+								manifest)
+			self.assertTrue(assets, addon_id)
+			for relative in assets:
+				self.assertTrue(
+					os.path.exists(os.path.join(ROOT, 'docs', addon_id, relative)),
+					'docs/%s/%s is missing' % (addon_id, relative))
+
 	def test_the_repository_is_listed_in_its_own_catalogue(self):
 		catalogue = read(os.path.join(ROOT, 'docs/addons.xml'))
 		self.assertIsNotNone(version_of(catalogue, REPO_ID))

@@ -163,6 +163,60 @@ class DebridDispatcher(AddonTestCase):
 			self.assertIn(name, debrid.TAGS)
 
 
+class CachedProviderGoesFirst(AddonTestCase):
+	"""A source flagged [TB+] must not be resolved through Real-Debrid.
+
+	From a real report: the source list said TorBox had it cached, but
+	resolution walked the fixed priority order, so playback started and
+	announced "Playing via Real-Debrid" - contradicting the flag the user
+	had just chosen from.
+	"""
+
+	def setUp(self):
+		super(CachedProviderGoesFirst, self).setUp()
+		self.set(**{'rd.token': 'token', 'torbox.api_key': 'key',
+					'torbox.enabled': True})
+
+	def test_the_holder_is_asked_first(self):
+		self.assertEqual(debrid.order_for(['TorBox']),
+						 ['TorBox', 'Real-Debrid'])
+
+	def test_the_other_provider_still_gets_a_turn(self):
+		self.assertIn('Real-Debrid', debrid.order_for(['TorBox']))
+
+	def test_no_cache_information_leaves_the_configured_order(self):
+		self.assertEqual(debrid.order_for(None), ['Real-Debrid', 'TorBox'])
+		self.assertEqual(debrid.order_for([]), ['Real-Debrid', 'TorBox'])
+
+	def test_a_holder_that_is_not_enabled_is_ignored(self):
+		self.set(**{'torbox.enabled': False})
+		self.assertEqual(debrid.order_for(['TorBox']), ['Real-Debrid'])
+
+	def test_both_holders_keep_the_configured_order_between_them(self):
+		self.assertEqual(debrid.order_for(['TorBox', 'Real-Debrid']),
+						 ['Real-Debrid', 'TorBox'])
+
+	def test_the_named_provider_is_the_one_that_served_it(self):
+		with mock.patch('resources.lib.torbox.resolve_magnet',
+						return_value=('https://tb/file', None)), \
+				mock.patch('resources.lib.realdebrid.resolve_magnet') as rd:
+			url, error, provider = debrid.resolve_magnet(
+				'magnet:?x', 'abc', cached_by=['TorBox'])
+		self.assertEqual(provider, 'TorBox')
+		self.assertEqual(url, 'https://tb/file')
+		rd.assert_not_called()
+
+	def test_the_player_passes_the_sources_cache_flags_through(self):
+		from resources.lib import player
+		source = {'hash': 'ABC', 'url': 'magnet:?xt=urn:btih:ABC',
+				  'cached_by': ['TorBox']}
+		entry = {'media_type': 'movie', 'title': 'The Odyssey'}
+		with mock.patch('resources.lib.debrid.resolve_magnet',
+						return_value=('u', None, 'TorBox')) as resolve:
+			player._resolve_one(source, entry)
+		self.assertEqual(resolve.call_args.kwargs['cached_by'], ['TorBox'])
+
+
 class Versions(AddonTestCase):
 	def test_parses_a_three_part_version(self):
 		self.assertEqual(updater.parse_version('1.7.0'), (1, 7, 0))
