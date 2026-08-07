@@ -1,3 +1,22 @@
+v1.4.0
+- New: Settings > Tools > "Upload logs to GitHub" gathers everything
+  needed to diagnose a problem and puts it in a secret GitHub gist, then
+  shows you the link to share.
+  The report contains the add-on and Kodi versions, whether Trakt and
+  Real-Debrid are authorized, the Real-Debrid account state, which
+  CocoScrapers providers are enabled, every non-secret setting, and the
+  last 512 KB of kodi.log.
+- Credentials are removed before anything is uploaded. Kodi's log is
+  written by Kodi and every other add-on, and Real-Debrid puts its token
+  in the query string of every request, so tokens are present in older
+  logs regardless of this add-on. The report is scrubbed by pattern and
+  by exact match against the tokens this install actually holds, so a
+  token still leaks nothing even where it appears with no key name.
+  Secret settings are listed as "<set, redacted>", never by value.
+- Uses your own GitHub token with the "gist" scope only, entered in
+  Settings > Tools. No shared token is shipped: one embedded in a public
+  add-on would hand write access to anyone who unzipped it.
+
 v1.3.1
 - Fixed items never being marked watched on Trakt. Playback tracking ran
   in a thread started by the plugin, but Kodi destroys the plugin process

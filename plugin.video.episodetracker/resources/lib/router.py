@@ -59,6 +59,8 @@ def dispatch():
 		return updater.check_and_prompt()
 	if action == 'install_update':
 		return updater.prompt_install(params['version'])
+	if action == 'upload_logs':
+		return upload_logs()
 	if action == 'clear_cache':
 		return clear_cache()
 	if action == 'coco_settings':
@@ -435,6 +437,26 @@ def _revoke(fn):
 	fn()
 	control.notify(33019)
 	xbmc.executebuiltin('Container.Refresh')
+
+
+def upload_logs():
+	"""Collect a redacted diagnostics report and put it in a secret gist."""
+	from resources.lib import diagnostics
+	pd = control.progress_bg
+	pd.create(control.addon_name, control.lang(33060))
+	try:
+		report = diagnostics.collect()
+		url, error = diagnostics.upload(report)
+	except Exception:
+		control.error('log upload failed')
+		url, error = None, 'Unexpected error while collecting logs'
+	finally:
+		pd.close()
+	if url:
+		control.log('diagnostics uploaded: %s' % url)
+		control.ok_dialog(control.langf(33061, url), heading=control.lang(33059))
+	else:
+		control.ok_dialog(error or control.lang(33062), heading=control.lang(33059))
 
 
 def clear_cache():

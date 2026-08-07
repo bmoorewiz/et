@@ -66,5 +66,8 @@
 		<setting type="action" label="32081" action="RunPlugin(plugin://plugin.video.episodetracker/?action=clear_cache)" option="close" /><!-- Clear source cache -->
 		<setting type="action" label="32082" action="RunPlugin(plugin://plugin.video.episodetracker/?action=coco_settings)" option="close" /><!-- Open CocoScrapers settings -->
 		<setting id="debug.enabled" type="bool" label="32083" default="false" /><!-- Verbose logging -->
+		<setting label="32084" type="lsep" /><!-- Diagnostics -->
+		<setting id="logs.github_token" type="text" label="32085" default="" option="hidden" />
+		<setting type="action" label="32086" action="RunPlugin(plugin://plugin.video.episodetracker/?action=upload_logs)" option="close" />
 	</category>
 </settings>

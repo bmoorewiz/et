@@ -243,6 +243,18 @@ msgid "Verbose logging"
 msgstr ""
 
 # Runtime strings (33000+)
+msgctxt "#32084"
+msgid "Diagnostics"
+msgstr ""
+
+msgctxt "#32085"
+msgid "GitHub token (gist scope only)"
+msgstr ""
+
+msgctxt "#32086"
+msgid "Upload logs to GitHub"
+msgstr ""
+
 msgctxt "#33000"
 msgid "Episode Tracker"
 msgstr ""
@@ -438,4 +450,20 @@ msgstr ""
 
 msgctxt "#33055"
 msgid "Season %s  (%s episodes)"
+msgstr ""
+
+msgctxt "#33059"
+msgid "Upload logs"
+msgstr ""
+
+msgctxt "#33060"
+msgid "Collecting and redacting logs..."
+msgstr ""
+
+msgctxt "#33061"
+msgid "Uploaded. Share this link:[CR][CR]%s"
+msgstr ""
+
+msgctxt "#33062"
+msgid "Upload failed."
 msgstr ""
