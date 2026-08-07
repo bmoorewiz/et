@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-	<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.5.1" provider-name="bmoorewiz">
+	<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.5.2" provider-name="bmoorewiz">
 		<requires>
 			<import addon="xbmc.python" version="3.0.0" />
 			<import addon="script.module.requests" version="2.22.0" />
@@ -23,7 +23,7 @@
 				<icon>resources/icon.png</icon>
 				<fanart>resources/fanart.png</fanart>
 			</assets>
-			<news>v1.5.1 - Log upload now goes to paste.kodi.tv with no account or token needed. The GitHub token setting is gone.</news>
+			<news>v1.5.2 - Fixes "Torrent contains no playable video file" on torrents whose files are named unusually, and logs the file list when it happens.</news>
 		</extension>
 	</addon>
 	<addon id="repository.episodetracker" name="Episode Tracker Repository" version="1.0.0" provider-name="bmoorewiz">

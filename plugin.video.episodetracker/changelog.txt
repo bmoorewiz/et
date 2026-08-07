@@ -1,3 +1,20 @@
+v1.5.2
+- Fixed "Torrent contains no playable video file" rejecting torrents that
+  were perfectly playable. The check only accepted 14 file extensions and
+  only looked at one field for the file's name, so a release using .divx,
+  .vob, .mts, .ogm, .m2v and others, or a provider reporting the name
+  under a different key, was thrown away.
+- The known extension list is much wider, several name fields are
+  accepted, and if nothing matches by extension the largest file is used
+  instead - an unrecognised container now costs a guess rather than the
+  whole playback.
+- Torrents holding only archives, and torrents with nothing big enough to
+  be a video, are now reported as such instead of sharing one vague
+  message.
+- The torrent's file list is written to the log whenever selection is
+  unusual, so a diagnostics upload shows exactly what was rejected.
+- Both debrid providers now share this logic, so they behave identically.
+
 v1.5.1
 - "Upload logs for support" now posts to paste.kodi.tv, Kodi's own paste
   service, which accepts anonymous uploads. There is nothing to set up:

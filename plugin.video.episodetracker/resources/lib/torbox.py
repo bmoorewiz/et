@@ -19,7 +19,8 @@ from requests.adapters import HTTPAdapter
 
 from resources.lib import control
 from resources.lib import cache
-from resources.lib.realdebrid import VIDEO_EXTENSIONS, _episode_match
+from resources.lib import mediafiles
+from resources.lib.realdebrid import _episode_match
 
 BASE = 'https://api.torbox.app/v1/api'
 CREATE = '/torrents/createtorrent'
@@ -220,10 +221,6 @@ def unrestrict(torrent_id, file_id):
 	return None, error_text(result) or 'TorBox returned no download link'
 
 
-def _filename(entry):
-	return entry.get('short_name') or entry.get('name') or ''
-
-
 def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 	"""Add a magnet and return ``(playable_url, error)``."""
 	info_hash = (info_hash or '').lower()
@@ -257,23 +254,11 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 		if not files:
 			return _fail(torrent_id, 'TorBox returned no files for this torrent')
 
-		videos = [f for f in files
-				  if _filename(f).lower().endswith(VIDEO_EXTENSIONS)]
-		if not videos:
-			return _fail(torrent_id, 'Torrent contains no playable video file')
-		videos.sort(key=lambda f: f.get('size', 0), reverse=True)
-
-		chosen = None
-		if season and episode:
-			for candidate in videos:
-				if _episode_match(season, episode, _filename(candidate)):
-					chosen = candidate
-					break
-			if chosen is None and len(videos) > 1:
-				return _fail(torrent_id, 'No file matching S%02dE%02d in this torrent'
-							 % (int(season), int(episode)))
+		control.log('TorBox torrent %s files: %s'
+					% (torrent_id, mediafiles.describe(files)))
+		chosen, error = mediafiles.pick(files, season, episode, _episode_match)
 		if chosen is None:
-			chosen = videos[0]
+			return _fail(torrent_id, error)
 
 		url, error = unrestrict(torrent_id, chosen.get('id'))
 		if not control.get_bool('torbox.keep_cloud', False):

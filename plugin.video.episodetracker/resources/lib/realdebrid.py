@@ -16,16 +16,15 @@ from requests.adapters import HTTPAdapter
 
 from resources.lib import control
 from resources.lib import cache
+from resources.lib import mediafiles
 
 REST_BASE = 'https://api.real-debrid.com/rest/1.0/'
 OAUTH_BASE = 'https://api.real-debrid.com/oauth/v2/'
 OPEN_SOURCE_CLIENT_ID = 'X245A4XAIBGVM'
 GRANT_TYPE = 'http://oauth.net/grant_type/device/1.0'
 
-VIDEO_EXTENSIONS = (
-	'.mkv', '.mp4', '.avi', '.mov', '.m4v', '.mpg', '.mpeg', '.wmv',
-	'.flv', '.ts', '.m2ts', '.webm', '.ogv', '.iso',
-)
+# Kept as an alias: the canonical list now lives in mediafiles.
+VIDEO_EXTENSIONS = mediafiles.VIDEO_EXTENSIONS
 
 # Real-Debrid rate limits and disallows too many simultaneous magnet resolves.
 _resolve_semaphore = threading.Semaphore(3)
@@ -584,28 +583,19 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 							 'Real-Debrid returned no download links (status: %s)'
 							 % (status or 'unknown'))
 
-			selected = [
-				(idx, f) for idx, f in
-				enumerate([f for f in info['files'] if f.get('selected') == 1])
-				if f['path'].lower().endswith(VIDEO_EXTENSIONS)
-			]
-			selected.sort(key=lambda x: x[1].get('bytes', 0), reverse=True)
-			if not selected:
-				return _fail(torrent_id, 'Torrent contains no playable video file')
-
-			index = None
-			if season and episode:
-				for idx, f in selected:
-					if _episode_match(season, episode, f['path']):
-						index = idx
-						break
-				if index is None and len(selected) > 1:
-					# a pack that does not actually carry this episode
-					return _fail(torrent_id,
-								 'No file matching S%02dE%02d in this torrent'
-								 % (int(season), int(episode)))
-			if index is None:
-				index = selected[0][0]
+			# links[] lines up with the selected files in order, so the index
+			# into that enumeration is what identifies the file - keep it.
+			chosen_files = list(enumerate(
+				[f for f in info['files'] if f.get('selected') == 1]))
+			control.log('Real-Debrid torrent %s files: %s'
+						% (torrent_id,
+						   mediafiles.describe([f for _i, f in chosen_files])))
+			by_entry = {id(f): idx for idx, f in chosen_files}
+			entry, error = mediafiles.pick([f for _i, f in chosen_files],
+										   season, episode, _episode_match)
+			if entry is None:
+				return _fail(torrent_id, error)
+			index = by_entry[id(entry)]
 
 			try:
 				link = info['links'][index]
