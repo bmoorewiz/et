@@ -90,6 +90,11 @@ def _resolve_one(source, entry):
 		_magnet_for(source), source.get('hash', ''), season, episode, title)
 
 
+def provider_tag(name):
+	"""Short label for a provider, e.g. Real-Debrid -> RD."""
+	return debrid.TAGS.get(name, name or '?')
+
+
 # How many sources to try per quality tier, best first, before giving up.
 # CAM and screener results are counted in the SD bucket.
 _TIERS = (
@@ -161,13 +166,13 @@ def play(source, entry):
 
 	pd = control.progress_bg
 	pd.create(control.addon_name, control.lang(33013))
-	resolved, error = None, None
+	resolved, error, provider = None, None, None
 	try:
 		for position, candidate in enumerate(queue, 1):
 			pd.update(int((position - 1) * 100 / len(queue)),
 					  control.langf(33043, position, len(queue),
 									candidate.get('quality', '')))
-			resolved, error = _resolve_one(candidate, entry)
+			resolved, error, provider = _resolve_one(candidate, entry)
 			if resolved:
 				source = candidate
 				break
@@ -190,8 +195,18 @@ def play(source, entry):
 		control.resolve_failed()
 		return
 
+	# Say which service is actually serving this, since with both enabled
+	# the cache flags on the source list only predict it.
+	control.log('playing %s via %s (%s)'
+				% (display_label(entry), provider, source.get('quality', '?')))
+	if provider and control.get_bool('playback.show_provider', True):
+		control.notify(control.langf(33071, provider))
+
 	item = xbmcgui.ListItem(path=resolved)
-	item.setLabel(display_label(entry))
+	label = display_label(entry)
+	if provider and control.get_bool('playback.label_provider', False):
+		label = '%s  [%s]' % (label, provider_tag(provider))
+	item.setLabel(label)
 	info = media_info(entry)
 	try:
 		tag = item.getVideoInfoTag()

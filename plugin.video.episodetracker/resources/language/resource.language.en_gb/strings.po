@@ -218,6 +218,14 @@ msgctxt "#32073"
 msgid "SD sources to try"
 msgstr ""
 
+msgctxt "#32074"
+msgid "Show which debrid service is playing"
+msgstr ""
+
+msgctxt "#32075"
+msgid "Add the service to the playing title"
+msgstr ""
+
 msgctxt "#32060"
 msgid "Lists"
 msgstr ""
@@ -506,4 +514,8 @@ msgstr ""
 
 msgctxt "#33070"
 msgid "TorBox"
+msgstr ""
+
+msgctxt "#33071"
+msgid "Playing via %s"
 msgstr ""

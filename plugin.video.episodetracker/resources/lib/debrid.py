@@ -82,10 +82,15 @@ def cached_hashes(hashes):
 
 
 def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
-	"""Try each enabled provider in order. Returns ``(url, error)``."""
+	"""Try each enabled provider in order.
+
+	Returns ``(url, error, provider)``. The provider name is carried back
+	rather than only logged, so the caller can tell the user which service
+	is actually serving the stream when both are enabled.
+	"""
 	names = providers()
 	if not names:
-		return None, 'No debrid provider is set up.'
+		return None, 'No debrid provider is set up.', None
 	errors = []
 	for name in names:
 		try:
@@ -96,6 +101,6 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 			url, error = None, 'unexpected error: %s' % exc
 		if url:
 			control.log('resolved via %s' % name)
-			return url, None
+			return url, None, name
 		errors.append('%s: %s' % (name, error))
-	return None, ' | '.join(errors)
+	return None, ' | '.join(errors), None

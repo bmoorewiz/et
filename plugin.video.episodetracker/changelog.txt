@@ -1,3 +1,17 @@
+v1.6.0
+- Playback now tells you which debrid service served the stream. With
+  both Real-Debrid and TorBox enabled there was previously no way to
+  know: the [RD+]/[TB+] flags on the source list only say who has a
+  torrent cached, not who ended up providing it, and the answer was
+  written to the log alone.
+- A short notification names the service when playback starts. Turn it
+  off with "Show which debrid service is playing".
+- Optionally append the service to the playing title, so it stays visible
+  in the player OSD rather than passing by. Off by default; enable "Add
+  the service to the playing title".
+- The choice is logged either way, so a diagnostics upload shows which
+  service served each attempt.
+
 v1.5.2
 - Fixed "Torrent contains no playable video file" rejecting torrents that
   were perfectly playable. The check only accepted 14 file extensions and
