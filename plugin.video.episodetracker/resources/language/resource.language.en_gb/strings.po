@@ -86,6 +86,42 @@ msgctxt "#32028"
 msgid "Sign out of Real-Debrid"
 msgstr ""
 
+msgctxt "#32090"
+msgid "TorBox"
+msgstr ""
+
+msgctxt "#32091"
+msgid "Enable TorBox"
+msgstr ""
+
+msgctxt "#32092"
+msgid "TorBox API key"
+msgstr ""
+
+msgctxt "#32093"
+msgid "Only use TorBox for cached torrents"
+msgstr ""
+
+msgctxt "#32094"
+msgid "Keep resolved torrents in TorBox cloud"
+msgstr ""
+
+msgctxt "#32095"
+msgid "Check TorBox account"
+msgstr ""
+
+msgctxt "#32096"
+msgid "Clear TorBox API key"
+msgstr ""
+
+msgctxt "#32097"
+msgid "Provider order"
+msgstr ""
+
+msgctxt "#32098"
+msgid "Try debrid providers in this order"
+msgstr ""
+
 msgctxt "#32040"
 msgid "Playback"
 msgstr ""
@@ -466,4 +502,8 @@ msgstr ""
 
 msgctxt "#33062"
 msgid "Upload failed."
+msgstr ""
+
+msgctxt "#33070"
+msgid "TorBox"
 msgstr ""

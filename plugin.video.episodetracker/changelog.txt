@@ -1,3 +1,21 @@
+v1.5.0
+- Added TorBox as a debrid provider alongside Real-Debrid. Enable it and
+  paste your API key under Settings > Accounts.
+- Both providers can be enabled at once. A source is tried against each in
+  turn, which is worth doing because a torrent uncached on one is often
+  cached on the other. The order is configurable.
+- TorBox's cache check actually works, unlike Real-Debrid's deprecated
+  one, so cached sources are genuinely flagged before you pick: [TB+] for
+  TorBox, [RD+] for Real-Debrid, [Download] for uncached. Cached sources
+  sort to the top.
+- By default TorBox is only used for torrents it already has cached, so it
+  never starts a download you would have to wait for. Turn off "Only use
+  TorBox for cached torrents" to allow it.
+- When every provider fails, each one's reason is reported rather than
+  just the last.
+- Diagnostics uploads include the TorBox settings and account state, with
+  the API key redacted like every other credential.
+
 v1.4.0
 - New: Settings > Tools > "Upload logs to GitHub" gathers everything
   needed to diagnose a problem and puts it in a secret GitHub gist, then

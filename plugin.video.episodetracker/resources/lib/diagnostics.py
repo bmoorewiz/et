@@ -37,7 +37,7 @@ MAX_LOG_BYTES = 512 * 1024
 _SECRET_SETTINGS = (
 	'trakt.token', 'trakt.refresh', 'trakt.client_secret', 'trakt.client_id',
 	'rd.token', 'rd.refresh', 'rd.client_id', 'rd.client_secret',
-	'updates.token', 'logs.github_token',
+	'updates.token', 'logs.github_token', 'torbox.api_key',
 )
 # Settings worth seeing in full when diagnosing behaviour.
 _REPORTED_SETTINGS = (
@@ -51,7 +51,8 @@ _REPORTED_SETTINGS = (
 	'scrobble.threshold.episode', 'scrobble.threshold.movie',
 	'list.aired_only', 'list.sort', 'cache.hours',
 	'updates.enabled', 'updates.interval', 'updates.repo', 'updates.branch',
-	'debug.enabled',
+	'torbox.enabled', 'torbox.cached_only', 'torbox.keep_cloud',
+	'debrid.priority', 'debug.enabled',
 )
 
 
@@ -122,11 +123,13 @@ def _accounts():
 	lines.append('trakt app creds : %s' % trakt.has_credentials())
 	lines.append('rd authorized   : %s (user: %s)'
 				 % (realdebrid.authorized(), control.setting('rd.user', '-') or '-'))
+	from resources.lib import debrid
+	lines.append('debrid providers: %s' % (', '.join(debrid.providers()) or 'none'))
 	try:
-		ok, message = realdebrid.account_status()
-		lines.append('rd account      : %s - %s' % ('OK' if ok else 'PROBLEM', message))
+		ok, message = debrid.account_status()
+		lines.append('debrid accounts : %s - %s' % ('OK' if ok else 'PROBLEM', message))
 	except Exception:
-		lines.append('rd account      : could not be checked')
+		lines.append('debrid accounts : could not be checked')
 	return lines
 
 

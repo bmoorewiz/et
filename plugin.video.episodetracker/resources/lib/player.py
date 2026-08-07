@@ -6,7 +6,7 @@ scrobble progress back to Trakt."""
 import xbmcgui
 
 from resources.lib import control
-from resources.lib import realdebrid
+from resources.lib import debrid
 from resources.lib import trakt
 
 
@@ -86,7 +86,7 @@ def _resolve_one(source, entry):
 		season = entry.get('season')
 		episode = entry.get('episode')
 		title = entry.get('show_title', '')
-	return realdebrid.resolve_magnet(
+	return debrid.resolve_magnet(
 		_magnet_for(source), source.get('hash', ''), season, episode, title)
 
 

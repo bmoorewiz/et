@@ -14,6 +14,7 @@ from resources.lib import scrapers
 from resources.lib import cache
 from resources.lib import player
 from resources.lib import updater
+from resources.lib import debrid
 
 
 def _encode(obj):
@@ -59,6 +60,11 @@ def dispatch():
 		return updater.check_and_prompt()
 	if action == 'install_update':
 		return updater.prompt_install(params['version'])
+	if action == 'torbox_check':
+		return torbox_check()
+	if action == 'torbox_revoke':
+		from resources.lib import torbox
+		return _revoke(torbox.revoke)
 	if action == 'upload_logs':
 		return upload_logs()
 	if action == 'clear_cache':
@@ -356,8 +362,12 @@ def _add_source_item(source, entry, cache_known=False):
 	info_line = source.get('info', '')
 	prefix = ''
 	if cache_known:
-		prefix = ('[COLOR lime][RD+][/COLOR] ' if source.get('rd_cached')
-				  else '[COLOR grey][RD Download][/COLOR] ')
+		holders = source.get('cached_by') or []
+		if holders:
+			tags = '/'.join(debrid.TAGS.get(n, n) for n in holders)
+			prefix = '[COLOR lime][%s+][/COLOR] ' % tags
+		else:
+			prefix = '[COLOR grey][Download][/COLOR] '
 	# Colour the quality badge by tier so 4K/1080p/720p are scannable at a glance.
 	quality_badge = _color('[B]%s[/B]' % quality,
 						   _QUALITY_COLOR.get(quality, _DEFAULT_QUALITY_COLOR))
@@ -405,7 +415,7 @@ def _preflight():
 	if not scrapers.available():
 		control.ok_dialog(33008)
 		return False
-	if not realdebrid.authorized():
+	if not debrid.any_authorized():
 		control.notify(33007)
 		return False
 	if not trakt.authorized():
@@ -413,7 +423,7 @@ def _preflight():
 		return False
 	# An expired or non-premium Real-Debrid account fails every single
 	# resolve, so say so up front rather than after four failed attempts.
-	ok, message = realdebrid.account_status()
+	ok, message = debrid.account_status()
 	if not ok:
 		control.ok_dialog(message, heading=control.lang(33005))
 		return False
@@ -437,6 +447,13 @@ def _revoke(fn):
 	fn()
 	control.notify(33019)
 	xbmc.executebuiltin('Container.Refresh')
+
+
+def torbox_check():
+	"""Report whether the stored TorBox key works."""
+	from resources.lib import torbox
+	ok, message = torbox.account_status()
+	control.ok_dialog(message, heading=control.lang(33070))
 
 
 def upload_logs():

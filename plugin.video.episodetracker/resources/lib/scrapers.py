@@ -114,9 +114,19 @@ def _build_data(entry):
 			'premiered': text(entry.get('first_aired'))[:10],
 			'aliases': [],
 		}
-	if control.setting('rd.token'):
-		data['debrid_service'] = 'Real-Debrid'
-		data['debrid_token'] = control.setting('rd.token')
+	# A few scrapers take a debrid hint; give them the highest-priority
+	# provider that is actually set up.
+	try:
+		from resources.lib import debrid
+		active = debrid.providers()
+		if active:
+			data['debrid_service'] = active[0]
+			if active[0] == 'Real-Debrid':
+				data['debrid_token'] = control.setting('rd.token')
+			else:
+				data['debrid_token'] = control.setting('torbox.api_key')
+	except Exception:
+		pass
 	return data
 
 
@@ -224,31 +234,34 @@ def cached_sources(entry):
 
 
 def annotate_cached(sources):
-	"""Flag which sources Real-Debrid reports as already cached.
+	"""Flag which debrid providers report each source as already cached.
 
-	Returns ``(sources, usable)``. Real-Debrid deprecated the cache-check
-	endpoint, so when it gives nothing back every source is left unflagged
-	rather than being wrongly marked uncached.
+	Returns ``(sources, usable)``. Real-Debrid deprecated its cache-check
+	endpoint and answers with nothing useful; TorBox's works. When no
+	provider gives a usable answer every source is left unflagged rather
+	than being wrongly marked uncached.
 	"""
 	if not sources or not control.get_bool('sources.check_cache', True):
 		return sources, False
 	try:
-		from resources.lib import realdebrid
+		from resources.lib import debrid
 		hashes = [s.get('hash') for s in sources if s.get('hash')]
-		cached, usable = realdebrid.cached_hashes(hashes)
+		mapping, usable = debrid.cached_hashes(hashes)
 	except Exception:
 		control.error('cache check failed')
 		return sources, False
 	if not usable:
-		control.log('Real-Debrid returned no usable cache information; '
+		control.log('no debrid provider returned usable cache information; '
 					'listing all sources unflagged')
 		return sources, False
 	for item in sources:
-		item['rd_cached'] = (item.get('hash') or '').lower() in cached
+		holders = mapping.get((item.get('hash') or '').lower(), [])
+		item['cached_by'] = holders
+		item['rd_cached'] = bool(holders)
 	if control.get_bool('sources.only_cached', False):
-		sources = [s for s in sources if s.get('rd_cached')]
+		sources = [s for s in sources if s.get('cached_by')]
 	else:
-		sources.sort(key=lambda s: not s.get('rd_cached'))
+		sources.sort(key=lambda s: not s.get('cached_by'))
 	return sources, True
 
 

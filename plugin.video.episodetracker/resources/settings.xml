@@ -20,6 +20,17 @@
 		<setting id="rd.expires" type="text" label="32026" default="" visible="false" />
 		<setting type="action" label="32027" action="RunPlugin(plugin://plugin.video.episodetracker/?action=rd_auth)" option="close" /><!-- Authorize Real-Debrid -->
 		<setting type="action" label="32028" action="RunPlugin(plugin://plugin.video.episodetracker/?action=rd_revoke)" option="close" /><!-- Sign out of Real-Debrid -->
+
+		<setting label="32090" type="lsep" /><!-- TorBox -->
+		<setting id="torbox.enabled" type="bool" label="32091" default="false" />
+		<setting id="torbox.api_key" type="text" label="32092" default="" option="hidden" subsetting="true" enable="eq(-1,true)" />
+		<setting id="torbox.cached_only" type="bool" label="32093" default="true" subsetting="true" enable="eq(-2,true)" />
+		<setting id="torbox.keep_cloud" type="bool" label="32094" default="false" subsetting="true" enable="eq(-3,true)" />
+		<setting type="action" label="32095" action="RunPlugin(plugin://plugin.video.episodetracker/?action=torbox_check)" option="close" />
+		<setting type="action" label="32096" action="RunPlugin(plugin://plugin.video.episodetracker/?action=torbox_revoke)" option="close" />
+
+		<setting label="32097" type="lsep" /><!-- Provider order -->
+		<setting id="debrid.priority" type="enum" label="32098" values="Real-Debrid first|TorBox first" default="0" />
 	</category>
 
 	<category label="32040"><!-- Playback -->
