@@ -141,11 +141,19 @@ def main_menu():
 
 
 def next_episodes_menu(refresh=False):
+	"""The next-up list.
+
+	Never cached to disc. This list changes while you are away from it -
+	finishing an episode removes it - and Kodi's directory cache would
+	otherwise redisplay the copy it made before playback started, so an
+	episode you just watched would still be sitting there when you backed
+	out of the player.
+	"""
 	if not trakt.authorized():
 		control.notify(33006)
 		control.add_directory_item(control.lang(33004),
 								   {'action': 'trakt_auth'}, is_folder=False)
-		control.end_directory(content='')
+		control.end_directory(cache_to_disc=False, content='')
 		return
 
 	pd = control.progress_bg
@@ -158,14 +166,14 @@ def next_episodes_menu(refresh=False):
 	if not entries:
 		control.add_directory_item(control.lang(33010),
 								   {'action': 'refresh'}, is_folder=False)
-		control.end_directory(content='')
+		control.end_directory(cache_to_disc=False, content='')
 		return
 
 	autoplay = control.get_bool('results.autoplay', False)
 	for entry in entries:
 		_add_episode_item(entry, autoplay)
 
-	control.end_directory(content='episodes')
+	control.end_directory(cache_to_disc=False, content='episodes')
 
 
 def _add_episode_item(entry, autoplay):

@@ -204,6 +204,26 @@ class Actions(AddonTestCase):
 			router.hidden_shows_menu()
 		self.assertEqual(self.items()[0]['item'].label, control.lang(33081))
 
+	def test_next_episodes_is_never_cached_to_disc(self):
+		# Kodi would redisplay the copy it made before playback started, so
+		# an episode finished mid-playback would still be sitting there when
+		# you back out of the player.
+		self.set(**{'trakt.token': 'token'})
+		with mock.patch('resources.lib.trakt.next_episodes', return_value=[EPISODE]):
+			router.next_episodes_menu()
+		self.assertFalse(xbmcplugin.ENDED[0]['cacheToDisc'])
+
+	def test_an_empty_next_episodes_list_is_not_cached_either(self):
+		self.set(**{'trakt.token': 'token'})
+		with mock.patch('resources.lib.trakt.next_episodes', return_value=[]):
+			router.next_episodes_menu()
+		self.assertFalse(xbmcplugin.ENDED[0]['cacheToDisc'])
+
+	def test_the_signed_out_prompt_is_not_cached_either(self):
+		with mock.patch('resources.lib.trakt.next_episodes', return_value=[]):
+			router.next_episodes_menu()
+		self.assertFalse(xbmcplugin.ENDED[0]['cacheToDisc'])
+
 	def test_search_results_are_not_cached_to_disc(self):
 		with mock.patch('resources.lib.trakt.hidden_shows', return_value=[SHOW]):
 			router.hidden_shows_menu()

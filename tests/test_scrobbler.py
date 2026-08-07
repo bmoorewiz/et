@@ -156,6 +156,119 @@ class Scrobbling(ServiceBase):
 		self.assertEqual(self.scrobbles, [])
 
 
+class MarkWatchedDuringPlayback(ServiceBase):
+	"""Crossing the threshold is the trigger, not pressing stop.
+
+	Reported: "it only marks as watched when it 100% stops playing. If it's
+	still playing through the credits and you go to next episodes the
+	current episode is still there."
+	"""
+
+	def test_the_threshold_marks_it_without_stopping(self):
+		player = self.start(EPISODE, position=2200.0)  # 81% of 2700
+		player.sample()
+		self.assertEqual(len(self.history), 1)
+
+	def test_still_playing_afterwards(self):
+		player = self.start(EPISODE, position=2200.0)
+		player.sample()
+		self.assertTrue(player.isPlayingVideo())
+		self.assertEqual(len(self.history), 1)
+
+	def test_below_the_threshold_nothing_happens(self):
+		player = self.start(EPISODE, position=2159.0)  # 79.9%
+		player.sample()
+		self.assertEqual(self.history, [])
+
+	def test_it_marks_exactly_once_across_the_credits(self):
+		player = self.start(EPISODE, position=2200.0)
+		for position in (2200.0, 2300.0, 2400.0, 2500.0, 2600.0, 2700.0):
+			player.position = position
+			player.sample()
+		self.assertEqual(len(self.history), 1)
+
+	def test_stopping_afterwards_does_not_mark_it_again(self):
+		player = self.start(EPISODE, position=2200.0)
+		player.sample()
+		player.onPlayBackStopped()
+		self.assertEqual(len(self.history), 1)
+
+	def test_letting_it_end_does_not_mark_it_again(self):
+		player = self.start(EPISODE, position=2200.0)
+		player.sample()
+		player.onPlayBackEnded()
+		self.assertEqual(len(self.history), 1)
+
+	def test_the_configured_threshold_is_what_is_used(self):
+		self.set(**{'scrobble.threshold.episode': '50'})
+		player = self.start(EPISODE, position=1400.0)  # 51.8%
+		player.sample()
+		self.assertEqual(len(self.history), 1)
+
+	def test_the_setting_still_turns_it_off(self):
+		self.set(**{'scrobble.markwatched': False})
+		player = self.start(EPISODE, position=2200.0)
+		player.sample()
+		self.assertEqual(self.history, [])
+
+	def test_the_next_up_cache_is_dropped_so_the_list_refreshes(self):
+		# This is what actually removes the episode from Next Episodes.
+		from resources.lib import cache
+		cache.set('trakt_next_', [{'show_title': 'Severance'}])
+		with mock.patch('resources.lib.trakt.add_to_history',
+						wraps=lambda e: bool(cache.delete('trakt_next_') or True)):
+			player = self.start(EPISODE, position=2200.0)
+			player.sample()
+		self.assertIsNone(cache.get('trakt_next_'))
+
+	def test_a_transient_trakt_failure_is_retried_on_the_next_sample(self):
+		attempts = []
+
+		def flaky(entry):
+			attempts.append(entry)
+			return len(attempts) > 1
+
+		with mock.patch('resources.lib.trakt.add_to_history', side_effect=flaky):
+			player = self.start(EPISODE, position=2200.0)
+			player.sample()
+			player.position = 2300.0
+			player.sample()
+			player.position = 2400.0
+			player.sample()
+		self.assertEqual(len(attempts), 2, 'should retry once, then stop')
+
+	def test_a_trakt_outage_does_not_retry_forever(self):
+		# The sample loop runs every two seconds; unbounded retries would be
+		# a request every two seconds for the rest of the episode.
+		attempts = []
+		with mock.patch('resources.lib.trakt.add_to_history',
+						side_effect=lambda e: attempts.append(e) and False):
+			player = self.start(EPISODE, position=2200.0)
+			for position in range(2200, 2700, 20):
+				player.position = float(position)
+				player.sample()
+		self.assertEqual(len(attempts), scrobbler._MARK_ATTEMPTS)
+
+	def test_the_next_episode_is_still_offered(self):
+		player = self.start(EPISODE, position=2200.0)
+		player.sample()
+		player.onPlayBackEnded()
+		self.assertEqual(player.take_pending_next(), EPISODE)
+
+	def test_state_does_not_leak_into_the_next_playback(self):
+		player = self.start(EPISODE, position=2200.0)
+		player.sample()
+		player.onPlayBackEnded()
+		self.assertEqual(len(self.history), 1)
+		# A second episode in the same Kodi session must mark on its own.
+		scrobbler.announce(NEXT)
+		player.position = 0.0
+		player.onAVStarted()
+		player.position = 2200.0
+		player.sample()
+		self.assertEqual(len(self.history), 2)
+
+
 class MarkWatched(ServiceBase):
 	def test_playing_to_the_end_marks_watched(self):
 		player = self.start(EPISODE, position=2700.0)

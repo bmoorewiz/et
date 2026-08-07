@@ -1,3 +1,16 @@
+v1.7.3
+- Episodes are now marked watched the moment they pass the threshold,
+  while still playing, instead of waiting for you to press stop. Sitting
+  through the credits or leaving an episode running used to leave it in
+  Next Episodes until playback actually ended.
+- The Next Episodes list is no longer cached by Kodi. Even once an
+  episode was marked watched, backing out of the player redisplayed the
+  copy Kodi had saved before playback started, so the episode you had
+  just finished was still sitting there.
+- A failed mark-watched is retried on the next check rather than lost,
+  and gives up after three attempts so a Trakt outage cannot turn into a
+  request every two seconds for the rest of the episode.
+
 v1.7.2
 - Fixed playback failing on fake releases. Some torrents contain a single
   large file named exactly like a real release but ending in .exe - it is

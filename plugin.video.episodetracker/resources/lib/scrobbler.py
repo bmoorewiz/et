@@ -27,6 +27,11 @@ PLAYBACK_PROPERTY = 'plugin.video.episodetracker.playback'
 RESUME_PROPERTY = 'plugin.video.episodetracker.resume'
 _HOME = xbmcgui.Window(10000)
 
+# How many times to retry a failed mark-watched before letting it go. The
+# sample loop runs every two seconds, so without a cap a Trakt outage would
+# mean a request every two seconds until the episode ends.
+_MARK_ATTEMPTS = 3
+
 
 def announce(entry):
 	"""Called by the plugin: publish the item it is handing to Kodi."""
@@ -87,6 +92,8 @@ class ScrobblePlayer(xbmc.Player):
 		self._started = False
 		self._resume = None
 		self._pending_next = None
+		self._marked = False
+		self._mark_attempts = 0
 
 	# -- Kodi callbacks ---------------------------------------------------
 
@@ -132,6 +139,8 @@ class ScrobblePlayer(xbmc.Player):
 			self._percent = 0.0
 			self._started = False
 			self._resume = resume
+			self._marked = False
+			self._mark_attempts = 0
 		control.log('tracking playback: %s' % player_lib.display_label(entry))
 
 	def _seek(self, resume, total):
@@ -182,10 +191,45 @@ class ScrobblePlayer(xbmc.Player):
 				self._started = True
 		if first and percent > 0:
 			trakt.scrobble(entry, 'start', percent)
+		if percent >= player_lib.watched_threshold(entry):
+			self._mark_watched(entry, percent)
+
+	def _mark_watched(self, entry, percent):
+		"""Add to the Trakt history as soon as the threshold is passed.
+
+		Deliberately not left until playback stops. An episode you are still
+		watching - sitting through the credits, or leaving it running - had
+		already been watched by any reasonable definition, but stayed in Next
+		Episodes until you pressed stop, because that was the only moment
+		this ran.
+
+		Returns True if this call is what marked it. A failed attempt is
+		retried by the next sample rather than lost, but only a few times, so
+		a Trakt outage cannot turn into a request every two seconds for the
+		rest of the episode.
+		"""
+		if not control.get_bool('scrobble.markwatched', True):
+			return False
+		with self._lock:
+			if self._marked or self._mark_attempts >= _MARK_ATTEMPTS:
+				return False
+			self._mark_attempts += 1
+		control.log('marking watched at %.1f%% (threshold %d%%): %s'
+					% (percent, player_lib.watched_threshold(entry),
+					   player_lib.display_label(entry)))
+		if not trakt.add_to_history(entry):
+			control.log('mark watched failed, will retry (attempt %d of %d)'
+						% (self._mark_attempts, _MARK_ATTEMPTS))
+			return False
+		with self._lock:
+			self._marked = True
+		control.notify(33023)
+		return True
 
 	def _end(self, natural):
 		with self._lock:
 			entry, percent, started = self._entry, self._percent, self._started
+			finished = self._marked
 			self._entry, self._percent, self._started = None, 0.0, False
 			self._resume = None
 		if not entry:
@@ -193,22 +237,23 @@ class ScrobblePlayer(xbmc.Player):
 		# Playing to the very end is 100%, whatever the last sample caught.
 		if natural:
 			percent = 100.0
-		finished = False
 		try:
 			if started or percent > 0:
 				trakt.scrobble(entry, 'stop', percent)
 			threshold = player_lib.watched_threshold(entry)
-			if percent >= threshold and control.get_bool('scrobble.markwatched', True):
-				control.log('marking watched at %.1f%% (threshold %d%%): %s'
-							% (percent, threshold, player_lib.display_label(entry)))
-				if trakt.add_to_history(entry):
-					finished = True
-					control.notify(33023)
+			if finished:
+				pass  # already done mid-playback, when the threshold passed
+			elif percent >= threshold:
+				# Stopped between two samples, or skipped straight to the end.
+				finished = self._mark_watched(entry, percent)
 			else:
 				control.log('not marking watched, reached %.1f%% of %d%%: %s'
 							% (percent, threshold, player_lib.display_label(entry)))
 		except Exception:
 			control.error('scrobble on playback end failed')
+		finally:
+			with self._lock:
+				self._marked, self._mark_attempts = False, 0
 
 		# The prompt itself is deliberately not raised from here: this runs on
 		# a Kodi player callback, which must return promptly and must not block
