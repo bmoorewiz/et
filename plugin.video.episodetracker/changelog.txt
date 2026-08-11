@@ -1,3 +1,17 @@
+v1.7.4
+- Fixed episodes that have not aired yet appearing in Next Episodes.
+  Trakt's progress endpoint often returns the next episode without an air
+  date, and the filter treated a missing date as "assume it aired", so
+  those episodes went straight through. It now also reads the show's
+  aired/watched counts: once you have watched everything that has aired,
+  whatever comes next by definition has not.
+- When the air date is missing, the episode is now looked up directly so
+  the list has a real date to work with. That also restores the runtime,
+  without which the resume prompt could never work out a position, and
+  the episode summary.
+- The log now records how many unaired episodes were hidden, so this is
+  visible in a diagnostics upload rather than invisible.
+
 v1.7.3
 - Episodes are now marked watched the moment they pass the threshold,
   while still playing, instead of waiting for you to press stop. Sitting

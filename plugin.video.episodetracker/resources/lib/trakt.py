@@ -244,11 +244,37 @@ def _show_progress(trakt_id):
 							'count_specials': 'false', 'extended': 'full'})
 
 
+def _episode_details(show_id, season, number):
+	"""Full metadata for a single episode, including its air date."""
+	if not show_id or season is None or number is None:
+		return {}
+	return _request('GET', '/shows/%s/seasons/%s/episodes/%s'
+					% (show_id, season, number),
+					params={'extended': 'full'}) or {}
+
+
 def _build_entry(show, progress):
 	next_ep = progress.get('next_episode') if progress else None
 	if not next_ep:
 		return None
 	show_ids = show.get('ids', {})
+
+	# The progress endpoint does not reliably fill in the next episode's air
+	# date or runtime, even with extended=full - and without an air date an
+	# unaired episode is indistinguishable from an aired one, which is what
+	# put unaired episodes in the list. Ask for the episode itself when it is
+	# missing. One extra request per affected show, once per cache window.
+	if not next_ep.get('first_aired'):
+		detail = _episode_details(show_ids.get('trakt') or show_ids.get('slug'),
+								  next_ep.get('season'), next_ep.get('number'))
+		if detail:
+			next_ep = dict(next_ep)
+			next_ep['first_aired'] = detail.get('first_aired')
+			if not next_ep.get('runtime'):
+				next_ep['runtime'] = detail.get('runtime')
+			if not next_ep.get('overview'):
+				next_ep['overview'] = detail.get('overview') or ''
+
 	ep_ids = next_ep.get('ids', {})
 	return {
 		'media_type': 'episode',
@@ -270,8 +296,11 @@ def _build_entry(show, progress):
 		'runtime': next_ep.get('runtime'),
 		'plot': next_ep.get('overview', ''),
 		'last_watched': show.get('last_watched_at', ''),
-		'aired_count': (progress or {}).get('aired', 0),
-		'completed_count': (progress or {}).get('completed', 0),
+		# Left as None when absent rather than defaulted to 0: the aired-yet
+		# check reads these, and "Trakt did not say" must not look like
+		# "nothing has aired".
+		'aired_count': (progress or {}).get('aired'),
+		'completed_count': (progress or {}).get('completed'),
 	}
 
 
@@ -333,16 +362,52 @@ def next_episodes(refresh=False):
 	return _post_filter(results)
 
 
+def _count(value):
+	try:
+		return int(value)
+	except (TypeError, ValueError):
+		return None
+
+
+def has_aired(entry, now=None):
+	"""Has this entry's episode actually been broadcast yet?
+
+	Two independent signals, because neither is always available:
+
+	* the episode's own ``first_aired`` - exact, and authoritative whenever
+	  Trakt provides it;
+	* the show's aired/completed counts - Trakt counts only episodes that
+	  have already aired in ``aired``, so once ``completed`` has caught up
+	  with it, everything broadcast has been watched and whatever comes
+	  next has not aired.
+
+	The second signal is the fix for unaired episodes appearing in the
+	list: the progress endpoint does not reliably populate ``first_aired``
+	on ``next_episode``, and the old check treated a missing date as
+	"assume it aired", so those episodes sailed straight through.
+	"""
+	now = time.time() if now is None else now
+	aired_at = _parse_iso(entry.get('first_aired'))
+	if aired_at is not None:
+		return aired_at <= now
+	total = _count(entry.get('aired_count'))
+	watched = _count(entry.get('completed_count'))
+	if total is not None and watched is not None:
+		return watched < total
+	# Nothing to go on at all. Show it: a missing episode is much harder to
+	# notice than an extra one.
+	return True
+
+
 def _post_filter(entries):
 	entries = list(entries)
 	if control.get_bool('list.aired_only', True):
 		now = time.time()
-		filtered = []
-		for e in entries:
-			aired = _parse_iso(e.get('first_aired'))
-			if aired is None or aired <= now:
-				filtered.append(e)
-		entries = filtered
+		kept = [e for e in entries if has_aired(e, now)]
+		hidden = len(entries) - len(kept)
+		if hidden:
+			control.log('hiding %d unaired episode(s)' % hidden)
+		entries = kept
 
 	sort_mode = control.get_int('list.sort', 0)
 	if sort_mode == 0:  # last watched (most recent first)

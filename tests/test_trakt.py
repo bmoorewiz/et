@@ -169,6 +169,147 @@ class NextEpisodes(TraktBase):
 		self.assertEqual(setter.call_args.kwargs['hours'], 6)
 
 
+class HasAired(AddonTestCase):
+	"""Unaired episodes must never reach the list.
+
+	Reported: episodes that had not aired yet were showing up. The old
+	check read only ``first_aired`` and treated a missing value as "assume
+	it aired" - and Trakt's progress endpoint does not reliably populate
+	that field on next_episode, so those episodes went straight through.
+	"""
+
+	NOW = 1786000000.0  # a fixed "now" so the tests do not drift
+
+	def entry(self, **fields):
+		return dict({'show_title': 'X', 'aired_count': None,
+					 'completed_count': None, 'first_aired': None}, **fields)
+
+	def test_a_past_air_date_has_aired(self):
+		self.assertTrue(trakt.has_aired(
+			self.entry(first_aired='2025-01-31T13:00:00.000Z'), self.NOW))
+
+	def test_a_future_air_date_has_not(self):
+		self.assertFalse(trakt.has_aired(
+			self.entry(first_aired='2099-01-01T00:00:00.000Z'), self.NOW))
+
+	def test_no_date_falls_back_to_the_counts(self):
+		# Everything aired has been watched, so whatever is next has not aired.
+		self.assertFalse(trakt.has_aired(
+			self.entry(aired_count=12, completed_count=12), self.NOW))
+
+	def test_the_counts_also_recognise_an_aired_episode(self):
+		self.assertTrue(trakt.has_aired(
+			self.entry(aired_count=12, completed_count=10), self.NOW))
+
+	def test_a_show_with_nothing_aired_yet(self):
+		self.assertFalse(trakt.has_aired(
+			self.entry(aired_count=0, completed_count=0), self.NOW))
+
+	def test_watching_ahead_of_broadcast_still_counts_as_unaired(self):
+		self.assertFalse(trakt.has_aired(
+			self.entry(aired_count=10, completed_count=11), self.NOW))
+
+	def test_an_air_date_wins_over_the_counts(self):
+		# The date is exact; the counts are derived and can lag.
+		self.assertFalse(trakt.has_aired(
+			self.entry(first_aired='2099-01-01T00:00:00.000Z',
+					   aired_count=12, completed_count=1), self.NOW))
+		self.assertTrue(trakt.has_aired(
+			self.entry(first_aired='2020-01-01T00:00:00.000Z',
+					   aired_count=12, completed_count=12), self.NOW))
+
+	def test_with_no_signal_at_all_it_is_shown(self):
+		# A missing episode is much harder to notice than an extra one.
+		self.assertTrue(trakt.has_aired(self.entry(), self.NOW))
+
+	def test_unparseable_dates_and_counts_do_not_crash(self):
+		trakt.has_aired(self.entry(first_aired='soon', aired_count='lots',
+								   completed_count=None), self.NOW)
+
+	def test_the_list_drops_unaired_entries(self):
+		entries = [self.entry(show_title='Aired', aired_count=12,
+							  completed_count=10),
+				   self.entry(show_title='Unaired', aired_count=12,
+							  completed_count=12)]
+		self.assertEqual([e['show_title'] for e in trakt._post_filter(entries)],
+						 ['Aired'])
+
+	def test_the_setting_still_lets_them_through(self):
+		self.set(**{'list.aired_only': False})
+		entries = [self.entry(show_title='Unaired', aired_count=12,
+							  completed_count=12)]
+		self.assertEqual(len(trakt._post_filter(entries)), 1)
+
+
+class AirDateBackfill(TraktBase):
+	"""Trakt's progress endpoint often omits the next episode's air date."""
+
+	def _progress_without_date(self):
+		self.api.route('GET', '/sync/watched/shows', [
+			{'last_watched_at': '2025-02-01T00:00:00.000Z',
+			 'show': {'title': 'Severance', 'year': 2022,
+					  'ids': {'trakt': 111, 'slug': 'severance'}}}])
+		self.api.route('GET', '/shows/111/progress/watched', {
+			'aired': 10, 'completed': 9,
+			# exactly what the endpoint returns in practice: no first_aired,
+			# no runtime, no overview
+			'next_episode': {'season': 2, 'number': 3, 'title': 'Who Is Alive?',
+							 'ids': {'trakt': 999}}})
+
+	def test_the_air_date_is_fetched_from_the_episode(self):
+		self._progress_without_date()
+		self.api.route('GET', '/shows/111/seasons/2/episodes/3', {
+			'first_aired': '2025-01-31T13:00:00.000Z', 'runtime': 45,
+			'overview': 'plot'})
+		entry = trakt.next_episodes(refresh=True)[0]
+		self.assertEqual(entry['first_aired'], '2025-01-31T13:00:00.000Z')
+
+	def test_the_runtime_comes_back_too(self):
+		# Without a runtime the resume prompt can never work out a position.
+		self._progress_without_date()
+		self.api.route('GET', '/shows/111/seasons/2/episodes/3', {
+			'first_aired': '2025-01-31T13:00:00.000Z', 'runtime': 45,
+			'overview': 'plot'})
+		entry = trakt.next_episodes(refresh=True)[0]
+		self.assertEqual(entry['runtime'], 45)
+		self.assertEqual(entry['plot'], 'plot')
+
+	def test_an_unaired_episode_fetched_this_way_is_then_hidden(self):
+		self._progress_without_date()
+		self.api.route('GET', '/shows/111/seasons/2/episodes/3',
+					   {'first_aired': '2099-01-01T00:00:00.000Z'})
+		self.assertEqual(trakt.next_episodes(refresh=True), [])
+
+	def test_no_extra_request_when_the_date_is_already_there(self):
+		self.api.route('GET', '/sync/watched/shows', [
+			{'last_watched_at': '2025-02-01T00:00:00.000Z',
+			 'show': {'title': 'Severance', 'ids': {'trakt': 111}}}])
+		self.api.route('GET', '/shows/111/progress/watched', {
+			'aired': 10, 'completed': 9,
+			'next_episode': {'season': 2, 'number': 3, 'title': 'T',
+							 'ids': {'trakt': 999}, 'runtime': 45,
+							 'first_aired': '2025-01-31T13:00:00.000Z'}})
+		trakt.next_episodes(refresh=True)
+		self.assertIsNone(self.api.sent('GET', '/shows/111/seasons/2/episodes/3'))
+
+	def test_a_failed_lookup_leaves_the_counts_to_decide(self):
+		self._progress_without_date()  # aired 10, completed 9 -> has aired
+		self.api.route('GET', '/shows/111/seasons/2/episodes/3', None, 500)
+		entries = trakt.next_episodes(refresh=True)
+		self.assertEqual(len(entries), 1)
+		self.assertIsNone(entries[0]['first_aired'])
+
+	def test_counts_are_kept_as_none_when_trakt_omits_them(self):
+		self.api.route('GET', '/sync/watched/shows', [
+			{'show': {'title': 'X', 'ids': {'trakt': 111}}}])
+		self.api.route('GET', '/shows/111/progress/watched', {
+			'next_episode': {'season': 1, 'number': 1, 'ids': {'trakt': 9},
+							 'first_aired': '2020-01-01T00:00:00.000Z'}})
+		entry = trakt.next_episodes(refresh=True)[0]
+		self.assertIsNone(entry['aired_count'])
+		self.assertIsNone(entry['completed_count'])
+
+
 class PostFilter(AddonTestCase):
 	def _entries(self):
 		return [
