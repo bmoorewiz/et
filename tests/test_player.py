@@ -290,3 +290,82 @@ class Play(AddonTestCase):
 				mock.patch('resources.lib.trakt.playback_progress', return_value=0):
 			player.play(source(), EPISODE)
 		self.assertIn('[TB]', xbmcplugin.RESOLVED[0]['item'].label)
+
+
+class UntriedTiers(AddonTestCase):
+	"""A film that only exists as a CAM fails with the default budgets.
+
+	Not because nothing is available - because the SD allowance is zero.
+	Saying so turns a mysterious failure into an actionable one.
+	"""
+
+	def _ranked(self, items):
+		return mock.patch('resources.lib.scrapers.cached_sources',
+						  return_value=items)
+
+	def test_a_tier_with_sources_but_no_budget_is_reported(self):
+		cams = [source('CAM', 'cam-%d' % n) for n in range(3)]
+		with self._ranked(cams):
+			self.assertEqual(player.untried_tiers(cams[0], EPISODE),
+							 [('SD', 3)])
+
+	def test_a_tier_with_budget_is_not_reported(self):
+		with self._ranked([source('1080p', 'hd')]):
+			self.assertEqual(player.untried_tiers(source('1080p'), EPISODE), [])
+
+	def test_a_tier_with_no_sources_is_not_reported(self):
+		with self._ranked([source('1080p', 'hd')]):
+			self.assertEqual(player.untried_tiers(source('1080p'), EPISODE), [])
+
+	def test_giving_sd_a_budget_removes_the_notice(self):
+		self.set(**{'playback.try.sd': '3'})
+		cams = [source('CAM', 'cam-%d' % n) for n in range(3)]
+		with self._ranked(cams):
+			self.assertEqual(player.untried_tiers(cams[0], EPISODE), [])
+
+	def test_a_scraper_failure_reports_nothing_rather_than_raising(self):
+		with mock.patch('resources.lib.scrapers.cached_sources',
+						side_effect=RuntimeError('boom')):
+			self.assertEqual(player.untried_tiers(source(), EPISODE), [])
+
+	def test_the_failure_dialog_mentions_them(self):
+		cams = [source('CAM', 'cam-%d' % n) for n in range(3)]
+		with self._ranked(cams), \
+				mock.patch('resources.lib.debrid.resolve_magnet',
+						   return_value=(None, 'not cached', None)):
+			player.play(cams[0], EPISODE)
+		message = self.last_dialog('ok')[2]
+		self.assertIn('3 SD', message)
+
+
+class PlayedItemArtwork(AddonTestCase):
+	def setUp(self):
+		super(PlayedItemArtwork, self).setUp()
+		self.set(**{'rd.token': 'token', 'trakt.token': 'trakt-token'})
+
+	def test_the_items_own_artwork_reaches_kodi(self):
+		art = {'poster': 'https://m/p.jpg', 'fanart': 'https://m/f.jpg',
+			   'thumb': 'https://m/s.jpg'}
+		with mock.patch('resources.lib.debrid.resolve_magnet',
+						return_value=('https://rd/file.mkv', None, 'TorBox')), \
+				mock.patch('resources.lib.trakt.playback_progress', return_value=0):
+			player.play(source(), dict(EPISODE, art=art))
+		played = xbmcplugin.RESOLVED[0]['item'].art
+		self.assertEqual(played['thumb'], 'https://m/s.jpg')
+		self.assertEqual(played['fanart'], 'https://m/f.jpg')
+
+	def test_without_artwork_the_addon_icon_is_used(self):
+		with mock.patch('resources.lib.debrid.resolve_magnet',
+						return_value=('https://rd/file.mkv', None, 'TorBox')), \
+				mock.patch('resources.lib.trakt.playback_progress', return_value=0):
+			player.play(source(), EPISODE)
+		self.assertTrue(xbmcplugin.RESOLVED[0]['item'].art['thumb'])
+
+	def test_the_sources_cache_flags_choose_the_provider(self):
+		asked = []
+		with mock.patch('resources.lib.debrid.resolve_magnet',
+						side_effect=lambda *a, **k: asked.append(k.get('cached_by'))
+						or ('https://tb/f', None, 'TorBox')), \
+				mock.patch('resources.lib.trakt.playback_progress', return_value=0):
+			player.play(dict(source(), cached_by=['TorBox']), EPISODE)
+		self.assertEqual(asked, [['TorBox']])

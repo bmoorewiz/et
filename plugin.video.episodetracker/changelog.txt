@@ -1,3 +1,30 @@
+v1.8.0
+- Season packs. The add-on now also asks each provider for a season pack
+  containing the episode you want, which for older or thinly-seeded shows
+  is often the only cached source there is. Packs are labelled SEASON PACK
+  in the list; the single episode is pulled out of them automatically. A
+  Severance S01E03 search went from 36 sources to 78.
+- Partial packs that stop before your episode are not offered.
+- Fake releases are now remembered. Once a torrent has been shown to be a
+  disguised executable, its hash is recorded and it stops appearing in
+  source lists entirely.
+- Sources too small to be the quality they claim are hidden. A 173-minute
+  film advertised as 4K in 1.17 GB is a tenth of the bitrate that needs.
+  The limits are deliberately generous, so small HEVC encodes are kept,
+  and season packs are exempt.
+- When playback fails, the message now says if a quality had sources that
+  were never tried because its per-quality limit is 0 - the reason a
+  CAM-only film fails with the default settings.
+- Artwork. Posters, fanart, logos and episode stills now come from Trakt
+  itself, so the lists and the player show the show rather than a generic
+  icon. No extra account or API key involved.
+- New "Continue Watching" menu listing everything you started and did not
+  finish, with how far in you got, drawn from the same Trakt records the
+  resume prompt uses.
+- New "Refresh sources" on an episode or film's context menu, to re-scrape
+  just that one item instead of clearing the whole cache.
+- Next Episodes now shows how far through a series you are, e.g. (3/10).
+
 v1.7.4
 - Fixed episodes that have not aired yet appearing in Next Episodes.
   Trakt's progress endpoint often returns the next episode without an air

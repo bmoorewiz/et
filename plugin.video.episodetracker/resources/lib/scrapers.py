@@ -15,6 +15,7 @@ import xbmcvfs
 
 from resources.lib import control
 from resources.lib import cache
+from resources.lib import fakes
 
 COCO_ID = 'script.module.cocoscrapers'
 
@@ -75,6 +76,29 @@ def _providers(coco, movie=False):
 		except Exception:
 			continue
 	return usable
+
+
+def _pack_providers(providers):
+	"""Providers that advertise season-pack search."""
+	return [(name, cls) for name, cls in providers
+			if getattr(cls, 'pack_capable', False)
+			and hasattr(cls, 'sources_packs')]
+
+
+def _pack_covers(item, episode):
+	"""Does this pack actually contain the episode we want?
+
+	Partial season packs report the range they cover; a pack that stops at
+	episode 6 is no use when episode 9 is wanted, and trying it wastes an
+	attempt on a torrent that can only fail the file match.
+	"""
+	start, end = item.get('episode_start'), item.get('episode_end')
+	if not start or not end:
+		return True  # a whole-season pack, or one that did not say
+	try:
+		return int(start) <= int(episode) <= int(end)
+	except (TypeError, ValueError):
+		return True
 
 
 def _build_data(entry):
@@ -139,7 +163,7 @@ def scrape(entry, progress_cb=None):
 	cache_key = _cache_key(entry)
 	cached = cache.get(cache_key)
 	if cached is not None:
-		return _filter_and_rank(cached)
+		return _filter_and_rank(cached, entry)
 
 	providers = _providers(coco, movie=is_movie(entry))
 	if not providers:
@@ -154,21 +178,51 @@ def scrape(entry, progress_cb=None):
 	results = []
 	results_lock = threading.Lock()
 
+	def collect(name, found):
+		if not found:
+			return
+		with results_lock:
+			for item in found:
+				item.setdefault('provider', name)
+				results.append(item)
+
 	def run_provider(name, source_cls):
 		try:
-			found = source_cls().sources(data, host_dict) or []
-			if found:
-				with results_lock:
-					for item in found:
-						item.setdefault('provider', name)
-						results.append(item)
+			collect(name, source_cls().sources(data, host_dict))
 		except Exception:
 			control.debug('provider "%s" raised' % name)
 
+	def run_pack_provider(name, source_cls):
+		"""Search the same provider for a season pack containing this episode.
+
+		For older or thinly-seeded shows a season pack is often the only
+		cached source there is, and both debrid providers can pull a single
+		episode out of one - the file selection already episode-matches, so
+		a pack needs no special handling past this point.
+		"""
+		try:
+			found = source_cls().sources_packs(data, host_dict) or []
+		except Exception:
+			control.debug('provider "%s" pack search raised' % name)
+			return
+		wanted = entry.get('episode')
+		usable = []
+		for item in found:
+			if not _pack_covers(item, wanted):
+				continue
+			item['package'] = item.get('package') or 'season'
+			usable.append(item)
+		collect(name, usable)
+
+	jobs = [(name, cls, run_provider) for name, cls in providers]
+	if not is_movie(entry) and control.get_bool('sources.packs', True):
+		packs = _pack_providers(providers)
+		jobs += [(name, cls, run_pack_provider) for name, cls in packs]
+		control.log('also searching %d provider(s) for season packs' % len(packs))
+
 	threads = []
-	for name, source_cls in providers:
-		t = threading.Thread(target=run_provider, args=(name, source_cls),
-							  name=name)
+	for name, source_cls, runner in jobs:
+		t = threading.Thread(target=runner, args=(name, source_cls), name=name)
 		t.daemon = True
 		threads.append(t)
 		t.start()
@@ -205,7 +259,7 @@ def scrape(entry, progress_cb=None):
 	else:
 		control.log('no sources returned by %d provider(s) for %s'
 					% (len(providers), _describe(entry)))
-	return _filter_and_rank(unique)
+	return _filter_and_rank(unique, entry)
 
 
 def _describe(entry):
@@ -230,7 +284,12 @@ def cached_sources(entry):
 	re-scraping.
 	"""
 	items = cache.get(_cache_key(entry))
-	return _filter_and_rank(items) if items else []
+	return _filter_and_rank(items, entry) if items else []
+
+
+def forget(entry):
+	"""Drop this item's cached source list so the next look re-scrapes."""
+	cache.delete(_cache_key(entry))
 
 
 def annotate_cached(sources):
@@ -278,7 +337,35 @@ def _number(value, default=0):
 		return default
 
 
-def _filter_and_rank(items):
+# Lowest gigabytes-per-hour a claim of each quality could honestly be.
+# Deliberately generous: real HEVC encodes go a long way below what these
+# formats "should" need, and hiding a source that works is worse than
+# showing one that does not. These floors only catch the physically
+# impossible - a 173-minute film claiming 4K in 1.17 GB is 0.4 GB/hour,
+# less than half of what the loosest real 4K encode manages.
+_MIN_GB_PER_HOUR = {'4K': 0.9, '1080p': 0.20, '720p': 0.10}
+
+
+def is_packed(item):
+	return bool(item.get('package'))
+
+
+def _plausible_size(item, runtime_minutes):
+	"""Could this file really be the quality it claims?
+
+	Skipped for season packs, whose size covers a whole run of episodes
+	rather than the one being watched.
+	"""
+	floor = _MIN_GB_PER_HOUR.get(item.get('quality'))
+	if not floor or not runtime_minutes or is_packed(item):
+		return True
+	size = _number(item.get('size'))
+	if not size:
+		return True  # no size reported - not evidence of anything
+	return size / (runtime_minutes / 60.0) >= floor
+
+
+def _filter_and_rank(items, entry=None):
 	allowed = set()
 	if control.get_bool('quality.4k', True):
 		allowed.add('4K')
@@ -290,8 +377,10 @@ def _filter_and_rank(items):
 		allowed.update(('SD', 'CAM', 'SCR'))
 
 	min_seeders = control.get_int('filter.min_seeders', 0)
+	check_size = control.get_bool('sources.plausible_size', True)
+	runtime = _number((entry or {}).get('runtime')) if entry else 0
 
-	filtered = []
+	filtered, implausible = [], 0
 	for item in items:
 		# only torrent/magnet sources are resolvable through this addon
 		magnet = item.get('url', '')
@@ -303,7 +392,17 @@ def _filter_and_rank(items):
 		seeders = _number(item.get('seeders'))
 		if min_seeders and seeders and seeders < min_seeders:
 			continue
+		if check_size and not _plausible_size(item, runtime):
+			implausible += 1
+			continue
 		filtered.append(item)
+
+	# Torrents already proven to be fakes, by a debrid provider showing us
+	# their file list. No heuristics involved, so they simply go.
+	filtered, known_fakes = fakes.drop(filtered)
+	if implausible or known_fakes:
+		control.log('dropped %d source(s) too small for their claimed quality '
+					'and %d known fake(s)' % (implausible, known_fakes))
 
 	filtered.sort(key=lambda i: (
 		_QUALITY_RANK.get(i.get('quality', 'SD'), 0),

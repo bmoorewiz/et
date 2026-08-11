@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-	<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.7.4" provider-name="bmoorewiz">
+	<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.8.0" provider-name="bmoorewiz">
 		<requires>
 			<import addon="xbmc.python" version="3.0.0" />
 			<import addon="script.module.requests" version="2.22.0" />
@@ -23,7 +23,7 @@
 				<icon>resources/icon.png</icon>
 				<fanart>resources/fanart.png</fanart>
 			</assets>
-			<news>v1.7.4 - Keeps unaired episodes out of Next Episodes, even when Trakt gives no air date for them.</news>
+			<news>v1.8.0 - Season packs, artwork from Trakt, a Continue Watching menu, fake-release memory, and a per-item source refresh.</news>
 		</extension>
 	</addon>
 	<addon id="repository.episodetracker" name="Episode Tracker Repository" version="1.0.0" provider-name="bmoorewiz">

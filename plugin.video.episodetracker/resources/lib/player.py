@@ -212,6 +212,29 @@ def _candidates(source, entry):
 	return queue
 
 
+def untried_tiers(source, entry):
+	"""Tiers that had sources available but no budget to try them.
+
+	Worth saying out loud on a failure. A film that only exists as a CAM
+	will fail every time with the default budgets - not because nothing is
+	available, but because the SD allowance is zero - and without this the
+	user is left thinking there were no sources at all.
+	"""
+	try:
+		from resources.lib import scrapers
+		ranked = scrapers.cached_sources(entry) or []
+	except Exception:
+		return []
+	skipped = []
+	for tier, key, default in _TIERS:
+		if max(0, control.get_int(key, default)) > 0:
+			continue
+		available = sum(1 for item in ranked if _tier(item) == tier)
+		if available:
+			skipped.append((tier, available))
+	return skipped
+
+
 def play(source, entry):
 	"""Resolve and play, falling through to the next ranked source on failure."""
 	# The per-tier budgets in _candidates() bound this; there is deliberately
@@ -244,6 +267,11 @@ def play(source, entry):
 			wrapped = control.langf(33044, len(queue), message)
 			message = (wrapped if wrapped.strip() and message in wrapped
 					   else '%s (tried %d sources)' % (message, len(queue)))
+		skipped = untried_tiers(source, entry)
+		if skipped:
+			message += '[CR][CR]' + control.langf(
+				33083, ', '.join('%d %s' % (count, tier)
+								 for tier, count in skipped))
 		control.ok_dialog(message,
 						  heading=control.lang(33014) or control.addon_name)
 		control.resolve_failed()
@@ -273,8 +301,12 @@ def play(source, entry):
 		control._apply_info_tag(tag, info)
 	except Exception:
 		item.setInfo('video', info)
-	item.setArt({'icon': control.addon_icon, 'thumb': control.addon_icon,
-				 'fanart': control.addon_fanart})
+	# The item's own artwork, so the player OSD and the "now playing" widget
+	# show the episode rather than the add-on's generic icon.
+	art = {'icon': control.addon_icon, 'thumb': control.addon_icon,
+		   'fanart': control.addon_fanart}
+	art.update({k: v for k, v in (entry.get('art') or {}).items() if v})
+	item.setArt(art)
 
 	# Hand the item to the background service BEFORE resolving. Kodi destroys
 	# this plugin process moments after setResolvedUrl(), so anything started

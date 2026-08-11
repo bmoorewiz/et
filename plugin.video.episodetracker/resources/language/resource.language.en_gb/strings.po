@@ -278,6 +278,18 @@ msgctxt "#32111"
 msgid "Offer the next episode when one finishes"
 msgstr ""
 
+msgctxt "#32112"
+msgid "Also search for season packs"
+msgstr ""
+
+msgctxt "#32113"
+msgid "Hide sources too small for their claimed quality"
+msgstr ""
+
+msgctxt "#32114"
+msgid "Show how far through a series you are"
+msgstr ""
+
 msgctxt "#32080"
 msgid "Tools"
 msgstr ""
@@ -570,4 +582,32 @@ msgstr ""
 
 msgctxt "#33082"
 msgid "Shows you have hidden from Next Episodes. Select one to unhide it."
+msgstr ""
+
+msgctxt "#33083"
+msgid "Not tried: %s (their per-quality limit is 0 in Settings > Playback)."
+msgstr ""
+
+msgctxt "#33084"
+msgid "Continue Watching"
+msgstr ""
+
+msgctxt "#33085"
+msgid "Episodes and films you started but did not finish."
+msgstr ""
+
+msgctxt "#33086"
+msgid "Refresh sources"
+msgstr ""
+
+msgctxt "#33087"
+msgid "Nothing part-watched."
+msgstr ""
+
+msgctxt "#33088"
+msgid "Re-scraping sources..."
+msgstr ""
+
+msgctxt "#33089"
+msgid "SEASON PACK"
 msgstr ""

@@ -51,6 +51,8 @@
 		<setting id="playback.try.1080p" type="slider" label="32071" default="5" range="0,1,20" option="int" subsetting="true" enable="eq(-2,true)" />
 		<setting id="playback.try.720p" type="slider" label="32072" default="10" range="0,1,30" option="int" subsetting="true" enable="eq(-3,true)" />
 		<setting id="playback.try.sd" type="slider" label="32073" default="0" range="0,1,20" option="int" subsetting="true" enable="eq(-4,true)" />
+		<setting id="sources.packs" type="bool" label="32112" default="true" />
+		<setting id="sources.plausible_size" type="bool" label="32113" default="true" />
 		<setting id="sources.check_cache" type="bool" label="32054" default="true" />
 		<setting id="sources.only_cached" type="bool" label="32055" default="false" subsetting="true" enable="eq(-1,true)" />
 		<setting id="rd.cache_check_minutes" type="slider" label="32056" default="20" range="5,5,120" option="int" subsetting="true" enable="eq(-2,true)" />
@@ -65,6 +67,7 @@
 	<category label="32060"><!-- Lists -->
 		<setting id="list.aired_only" type="bool" label="32061" default="true" /><!-- Only show aired episodes -->
 		<setting id="list.sort" type="enum" label="32062" values="Last watched|Recently aired|Alphabetical" default="0" />
+		<setting id="list.show_progress" type="bool" label="32114" default="true" />
 		<setting id="cache.hours" type="slider" label="32063" default="6" range="1,1,48" option="int" /><!-- Source cache (hours) -->
 	</category>
 

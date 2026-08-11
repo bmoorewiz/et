@@ -506,3 +506,138 @@ class History(TraktBase):
 	def test_an_entry_with_no_ids_is_refused(self):
 		self.assertFalse(trakt.add_to_history({'media_type': 'episode'}))
 		self.assertEqual(self.api.calls, [])
+
+
+class Artwork(AddonTestCase):
+	"""Trakt serves its own images now, so artwork needs no second provider."""
+
+	SHOW = {'title': 'Severance', 'ids': {'trakt': 111}, 'images': {
+		'poster': ['media.trakt.tv/images/shows/000/154/997/posters/medium/a.jpg.webp'],
+		'fanart': ['media.trakt.tv/images/shows/000/154/997/fanarts/medium/b.jpg.webp'],
+		'logo': ['media.trakt.tv/images/shows/000/154/997/logos/medium/c.png.webp'],
+		'thumb': ['media.trakt.tv/images/shows/000/154/997/thumbs/medium/d.jpg.webp'],
+	}}
+
+	def test_a_scheme_is_added(self):
+		# Trakt returns bare paths; Kodi needs a URL.
+		art = trakt.show_art(self.SHOW)
+		self.assertTrue(art['poster'].startswith('https://media.trakt.tv/'))
+
+	def test_an_absolute_url_is_left_alone(self):
+		art = trakt.show_art({'images': {'poster': ['https://elsewhere/x.jpg']}})
+		self.assertEqual(art['poster'], 'https://elsewhere/x.jpg')
+
+	def test_the_kodi_keys_are_filled_in(self):
+		art = trakt.show_art(self.SHOW)
+		self.assertEqual(set(art), {'poster', 'fanart', 'clearlogo', 'thumb'})
+
+	def test_missing_images_are_omitted_not_blank(self):
+		art = trakt.show_art({'images': {'poster': ['x/y.jpg']}})
+		self.assertEqual(set(art), {'poster', 'thumb'})
+		self.assertNotIn('', art.values())
+
+	def test_a_show_with_no_images_yields_nothing(self):
+		self.assertEqual(trakt.show_art({}), {})
+
+	def test_an_episode_screenshot_becomes_the_thumb(self):
+		episode = {'images': {'screenshot': ['media.trakt.tv/e/s.jpg.webp']}}
+		art = trakt.episode_art(episode, self.SHOW)
+		self.assertTrue(art['thumb'].endswith('/e/s.jpg.webp'))
+		self.assertIn('posters', art['poster'])
+
+	def test_an_episode_without_a_screenshot_keeps_the_shows_thumb(self):
+		art = trakt.episode_art({}, self.SHOW)
+		self.assertIn('thumbs', art['thumb'])
+
+	def test_an_empty_url_list_is_not_used(self):
+		self.assertEqual(trakt.show_art({'images': {'poster': [], 'fanart': ['']}}),
+						 {})
+
+
+class ArtworkInEntries(TraktBase):
+	def test_next_episodes_carry_artwork(self):
+		self.api.route('GET', '/sync/watched/shows', [
+			{'show': {'title': 'Severance', 'ids': {'trakt': 111},
+					  'images': {'poster': ['m/p.jpg'], 'fanart': ['m/f.jpg']}}}])
+		self.api.route('GET', '/shows/111/progress/watched', {
+			'aired': 10, 'completed': 9,
+			'next_episode': {'season': 2, 'number': 3, 'ids': {'trakt': 999},
+							 'first_aired': '2025-01-31T13:00:00.000Z',
+							 'runtime': 45,
+							 'images': {'screenshot': ['m/s.jpg']}}})
+		entry = trakt.next_episodes(refresh=True)[0]
+		self.assertEqual(entry['art']['poster'], 'https://m/p.jpg')
+		self.assertEqual(entry['art']['thumb'], 'https://m/s.jpg')
+
+	def test_the_watched_list_is_fetched_with_images(self):
+		self.api.route('GET', '/sync/watched/shows', [])
+		trakt.next_episodes(refresh=True)
+		self.assertEqual(self.api.calls[0]['params']['extended'], 'full')
+
+
+class InProgress(TraktBase):
+	"""Continue Watching, from the same records that drive resume."""
+
+	EPISODE_ITEM = {
+		'progress': 42.5, 'paused_at': '2026-08-01T00:00:00.000Z',
+		'episode': {'season': 2, 'number': 3, 'title': 'Who Is Alive?',
+					'ids': {'trakt': 999}, 'runtime': 45,
+					'images': {'screenshot': ['m/s.jpg']}},
+		'show': {'title': 'Severance', 'year': 2022, 'ids': {'trakt': 111},
+				 'images': {'poster': ['m/p.jpg']}},
+	}
+	MOVIE_ITEM = {
+		'progress': 12.0, 'paused_at': '2026-08-05T00:00:00.000Z',
+		'movie': {'title': 'Dune', 'year': 2021, 'ids': {'trakt': 7},
+				  'runtime': 155, 'images': {'poster': ['m/d.jpg']}},
+	}
+
+	def _routes(self, episodes=(), movies=()):
+		self.api.route('GET', '/sync/playback/episodes', list(episodes))
+		self.api.route('GET', '/sync/playback/movies', list(movies))
+
+	def test_episodes_and_movies_both_appear(self):
+		self._routes([self.EPISODE_ITEM], [self.MOVIE_ITEM])
+		entries = trakt.in_progress()
+		self.assertEqual({e['media_type'] for e in entries}, {'episode', 'movie'})
+
+	def test_most_recently_paused_first(self):
+		self._routes([self.EPISODE_ITEM], [self.MOVIE_ITEM])
+		self.assertEqual(trakt.in_progress()[0]['media_type'], 'movie')
+
+	def test_the_entry_is_playable(self):
+		self._routes([self.EPISODE_ITEM])
+		entry = trakt.in_progress()[0]
+		self.assertEqual(entry['show_title'], 'Severance')
+		self.assertEqual((entry['season'], entry['episode']), (2, 3))
+		self.assertEqual(entry['ep_trakt'], 999)
+		self.assertEqual(entry['runtime'], 45)
+		self.assertEqual(trakt._media_ref(entry)['ids'], {'trakt': 999})
+
+	def test_progress_is_carried_through(self):
+		self._routes([self.EPISODE_ITEM])
+		self.assertEqual(trakt.in_progress()[0]['progress'], 42.5)
+
+	def test_artwork_comes_along(self):
+		self._routes([self.EPISODE_ITEM])
+		art = trakt.in_progress()[0]['art']
+		self.assertEqual(art['thumb'], 'https://m/s.jpg')
+		self.assertEqual(art['poster'], 'https://m/p.jpg')
+
+	def test_a_malformed_record_is_skipped(self):
+		self._routes([{'progress': 10.0}, self.EPISODE_ITEM])
+		self.assertEqual(len(trakt.in_progress()), 1)
+
+	def test_junk_progress_does_not_crash(self):
+		self._routes([dict(self.EPISODE_ITEM, progress='lots')])
+		self.assertEqual(trakt.in_progress()[0]['progress'], 0.0)
+
+	def test_a_failed_call_is_empty_not_broken(self):
+		self.api.route('GET', '/sync/playback/episodes', None, 500)
+		self.api.route('GET', '/sync/playback/movies', None, 500)
+		self.assertEqual(trakt.in_progress(), [])
+
+	def test_unauthorized_never_calls_out(self):
+		self.set(**{'trakt.token': ''})
+		self.assertEqual(trakt.in_progress(), [])
+		self.assertEqual(self.api.calls, [])

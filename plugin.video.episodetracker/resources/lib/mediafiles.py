@@ -142,26 +142,40 @@ def playable_candidates(files):
 
 	# Nothing left. If what was filtered out was a big executable dressed up
 	# with a release name, say so plainly - it is a fake, not a near miss.
-	decoys = sorted((f for f in files
-					 if is_blocked(f) and size_of(f) >= MIN_VIDEO_BYTES),
-					key=size_of, reverse=True)
-	if decoys:
+	if decoys(files):
 		return [], ('fake release - the only large file is %s, which is not '
-					'a video' % basename(decoys[0]))
+					'a video' % basename(decoys(files)[0]))
 	if any(is_archive(f) for f in files):
 		return [], 'the torrent contains only archives, not a playable video'
 	return [], 'the torrent contains no file big enough to be a video'
 
 
-def pick(files, season=None, episode=None, matcher=None):
+def decoys(files):
+	"""Big files that are definitely not video - the mark of a fake release."""
+	return sorted((f for f in files
+				   if is_blocked(f) and size_of(f) >= MIN_VIDEO_BYTES),
+				  key=size_of, reverse=True)
+
+
+def pick(files, season=None, episode=None, matcher=None, info_hash=None):
 	"""Choose the file to play. Returns ``(entry, error)``.
 
 	`matcher` is the season/episode filename test, injected so this module
 	stays free of provider specifics.
+
+	`info_hash` lets a torrent that turns out to be a fake release be
+	remembered, so it can be dropped from future source lists rather than
+	offered and refused over and over. This is the only place with proof:
+	the decision is made from the file list the debrid provider returned.
 	"""
 	candidates, note = playable_candidates(files)
 	if note:
 		control.log('file selection: %s | files: %s' % (note, describe(files)))
+	if not candidates and info_hash:
+		fake = decoys(files)
+		if fake:
+			from resources.lib import fakes
+			fakes.remember(info_hash, basename(fake[0]))
 	if not candidates:
 		return None, 'Torrent contains no playable video file - %s' % note
 

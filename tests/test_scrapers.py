@@ -275,3 +275,203 @@ class AnnotateCached(AddonTestCase):
 		result, known = scrapers.annotate_cached(items)
 		self.assertFalse(known)
 		self.assertEqual(result, items)
+
+
+class SeasonPacks(AddonTestCase):
+	"""A season pack is often the only cached source an older show has.
+
+	Verified against the real CocoScrapers module: 9 of 9 enabled providers
+	advertise pack_capable, and a Severance S01E03 scrape returned 78
+	sources of which 42 were packs.
+	"""
+
+	def tearDown(self):
+		sys.modules.pop('cocoscrapers', None)
+
+	def _install(self, singles=(), packs=(), pack_capable=True, raises=False):
+		xbmcaddon.install(scrapers.COCO_ID)
+		module = types.ModuleType('cocoscrapers')
+		seen = {'pack_data': None}
+
+		class Source(object):
+			hasEpisodes = True
+			hasMovies = True
+
+			def sources(self, data, host_dict):
+				return [dict(s) for s in singles]
+
+			def sources_packs(self, data, host_dict, search_series=False,
+							  total_seasons=None, bypass_filter=False):
+				seen['pack_data'] = data
+				if raises:
+					raise RuntimeError('pack search exploded')
+				return [dict(p) for p in packs]
+
+		if pack_capable:
+			Source.pack_capable = True
+		module.sources = lambda: [('alpha', Source)]
+		sys.modules['cocoscrapers'] = module
+		return seen
+
+	def test_packs_are_searched_alongside_single_episodes(self):
+		self._install(singles=[source(name='single')],
+					  packs=[source(name='pack', hash='P1', package='season')])
+		found = scrapers.scrape(EPISODE)
+		self.assertEqual(sorted(s['name'] for s in found), ['pack', 'single'])
+
+	def test_packs_are_tagged_as_packs(self):
+		self._install(packs=[source(name='pack', hash='P1', package='season')])
+		found = scrapers.scrape(EPISODE)
+		self.assertTrue(scrapers.is_packed(found[0]))
+
+	def test_a_pack_with_no_package_flag_still_gets_one(self):
+		self._install(packs=[source(name='pack', hash='P1')])
+		self.assertTrue(scrapers.is_packed(scrapers.scrape(EPISODE)[0]))
+
+	def test_providers_that_cannot_do_packs_are_not_asked(self):
+		seen = self._install(singles=[source(name='single')], pack_capable=False)
+		scrapers.scrape(EPISODE)
+		self.assertIsNone(seen['pack_data'])
+
+	def test_movies_never_search_for_packs(self):
+		seen = self._install(singles=[source(name='single')])
+		scrapers.scrape(MOVIE)
+		self.assertIsNone(seen['pack_data'])
+
+	def test_the_setting_turns_pack_search_off(self):
+		self.set(**{'sources.packs': False})
+		seen = self._install(singles=[source(name='single')])
+		scrapers.scrape(EPISODE)
+		self.assertIsNone(seen['pack_data'])
+
+	def test_a_failing_pack_search_does_not_lose_the_singles(self):
+		self._install(singles=[source(name='single')], raises=True)
+		self.assertEqual([s['name'] for s in scrapers.scrape(EPISODE)], ['single'])
+
+	def test_packs_receive_a_string_season(self):
+		# eztv and friends do data['season'].zfill(2), which throws on an int.
+		seen = self._install(packs=[source(name='pack', hash='P1')])
+		scrapers.scrape(EPISODE)
+		self.assertIsInstance(seen['pack_data']['season'], str)
+		self.assertEqual(seen['pack_data']['season'].zfill(2), '02')
+
+	def test_a_partial_pack_that_misses_the_episode_is_dropped(self):
+		self._install(packs=[
+			source(name='early', hash='P1', episode_start=1, episode_end=2),
+			source(name='covering', hash='P2', episode_start=1, episode_end=6)])
+		found = scrapers.scrape(EPISODE)  # episode 3
+		self.assertEqual([s['name'] for s in found], ['covering'])
+
+	def test_a_whole_season_pack_is_always_kept(self):
+		self._install(packs=[source(name='whole', hash='P1')])
+		self.assertEqual(len(scrapers.scrape(EPISODE)), 1)
+
+	def test_pack_range_checks_survive_junk(self):
+		self.assertTrue(scrapers._pack_covers({'episode_start': 'x',
+											   'episode_end': 'y'}, 3))
+		self.assertTrue(scrapers._pack_covers({}, 3))
+
+
+class PlausibleSize(AddonTestCase):
+	"""A 173-minute film claiming 4K in 1.17 GB is 0.4 GB/hour."""
+
+	MOVIE = {'media_type': 'movie', 'title': 'The Odyssey', 'runtime': 173}
+	EPISODE = {'media_type': 'episode', 'runtime': 45}
+
+	def test_the_reported_fake_is_dropped(self):
+		fake = source('4K', size=1.17, name='The-Odyssey-.2026.-2160p-FULL-HD')
+		self.assertEqual(scrapers._filter_and_rank([fake], self.MOVIE), [])
+
+	def test_the_real_cam_survives(self):
+		cam = source('CAM', size=5.56, name='The.Odyssey.2026.HDTS')
+		self.assertEqual(len(scrapers._filter_and_rank([cam], self.MOVIE)), 1)
+
+	def test_a_small_but_real_x265_episode_survives(self):
+		# 300 MB for a 45-minute 1080p episode is a normal HEVC encode.
+		small = source('1080p', size=0.30, name='Show.S01E01.1080p.x265')
+		self.assertEqual(len(scrapers._filter_and_rank([small], self.EPISODE)), 1)
+
+	def test_season_packs_are_exempt(self):
+		# A pack's size covers a whole run, not the episode being watched.
+		pack = source('4K', size=16.82, name='Severance.S01.2160p', package='season')
+		self.assertEqual(len(scrapers._filter_and_rank([pack], self.EPISODE)), 1)
+
+	def test_a_source_with_no_size_is_not_judged(self):
+		unknown = source('4K', size=0, name='no size reported')
+		self.assertEqual(len(scrapers._filter_and_rank([unknown], self.MOVIE)), 1)
+
+	def test_nothing_is_judged_without_a_runtime(self):
+		fake = source('4K', size=1.17)
+		self.assertEqual(len(scrapers._filter_and_rank([fake], {'runtime': None})), 1)
+
+	def test_sd_and_cam_have_no_floor(self):
+		for quality in ('SD', 'CAM', 'SCR'):
+			tiny = source(quality, size=0.05, name='tiny')
+			self.assertEqual(len(scrapers._filter_and_rank([tiny], self.MOVIE)), 1,
+							 quality)
+
+	def test_the_setting_turns_it_off(self):
+		self.set(**{'sources.plausible_size': False})
+		fake = source('4K', size=1.17)
+		self.assertEqual(len(scrapers._filter_and_rank([fake], self.MOVIE)), 1)
+
+
+class KnownFakes(AddonTestCase):
+	def test_a_remembered_hash_never_appears_again(self):
+		from resources.lib import fakes
+		fakes.remember('ABC', 'Movie.2026.2160p.exe')
+		items = [source('1080p', hash='ABC'), source('1080p', hash='DEF')]
+		kept = scrapers._filter_and_rank(items, {'runtime': 120})
+		self.assertEqual([s['hash'] for s in kept], ['DEF'])
+
+	def test_the_match_is_case_insensitive(self):
+		from resources.lib import fakes
+		fakes.remember('abcdef')
+		self.assertTrue(fakes.is_known('ABCDEF'))
+
+	def test_an_unknown_hash_is_untouched(self):
+		from resources.lib import fakes
+		self.assertFalse(fakes.is_known('NOTHINGHERE'))
+		self.assertFalse(fakes.is_known(''))
+		self.assertFalse(fakes.is_known(None))
+
+	def test_the_file_list_is_what_records_it(self):
+		# Recorded only from a debrid provider's actual file list, so there
+		# is no heuristic and no false positive to trade off.
+		from resources.lib import fakes, mediafiles
+		mediafiles.pick([{'path': '/Movie.2026.2160p.exe', 'bytes': 1200 * 1048576}],
+						None, None, None, info_hash='FEED')
+		self.assertTrue(fakes.is_known('feed'))
+
+	def test_a_genuine_torrent_is_not_recorded(self):
+		from resources.lib import fakes, mediafiles
+		mediafiles.pick([{'path': '/Movie.2026.2160p.mkv', 'bytes': 8000 * 1048576}],
+						None, None, None, info_hash='GOOD')
+		self.assertFalse(fakes.is_known('GOOD'))
+
+	def test_a_missing_episode_is_not_a_fake(self):
+		# No file matched S01E09, but the torrent is a real video torrent.
+		from resources.lib import fakes, mediafiles
+		mediafiles.pick([{'path': '/Show.S01E01.mkv', 'bytes': 2000 * 1048576}],
+						1, 9, lambda s, e, p: False, info_hash='REAL')
+		self.assertFalse(fakes.is_known('REAL'))
+
+
+class Forget(AddonTestCase):
+	def tearDown(self):
+		sys.modules.pop('cocoscrapers', None)
+
+	def test_forgetting_forces_a_re_scrape(self):
+		from resources.lib import cache
+		cache.set(scrapers._cache_key(EPISODE), [source(name='old')])
+		self.assertEqual(len(scrapers.cached_sources(EPISODE)), 1)
+		scrapers.forget(EPISODE)
+		self.assertEqual(scrapers.cached_sources(EPISODE), [])
+
+	def test_forgetting_one_episode_leaves_the_others(self):
+		from resources.lib import cache
+		other = dict(EPISODE, episode=9)
+		cache.set(scrapers._cache_key(EPISODE), [source()])
+		cache.set(scrapers._cache_key(other), [source()])
+		scrapers.forget(EPISODE)
+		self.assertEqual(len(scrapers.cached_sources(other)), 1)

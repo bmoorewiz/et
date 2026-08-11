@@ -256,7 +256,8 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 
 		control.log('TorBox torrent %s files: %s'
 					% (torrent_id, mediafiles.describe(files)))
-		chosen, error = mediafiles.pick(files, season, episode, _episode_match)
+		chosen, error = mediafiles.pick(files, season, episode, _episode_match,
+										info_hash=info_hash)
 		if chosen is None:
 			return _fail(torrent_id, error)
 

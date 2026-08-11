@@ -592,7 +592,8 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title=''):
 						   mediafiles.describe([f for _i, f in chosen_files])))
 			by_entry = {id(f): idx for idx, f in chosen_files}
 			entry, error = mediafiles.pick([f for _i, f in chosen_files],
-										   season, episode, _episode_match)
+										   season, episode, _episode_match,
+										   info_hash=info_hash)
 			if entry is None:
 				return _fail(torrent_id, error)
 			index = by_entry[id(entry)]

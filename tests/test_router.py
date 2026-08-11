@@ -313,3 +313,139 @@ class Dispatch(AddonTestCase):
 								   ['plugin://plugin.video.episodetracker/', '1', '']):
 				router.dispatch()
 		main.assert_called_once()
+
+
+class ContinueWatching(AddonTestCase):
+	PART_WATCHED = dict(EPISODE, progress=42.5,
+						paused_at='2026-08-01T00:00:00.000Z')
+	PART_MOVIE = dict(MOVIE, progress=12.0,
+					  paused_at='2026-08-05T00:00:00.000Z')
+
+	def _menu(self, entries):
+		with mock.patch('resources.lib.trakt.in_progress', return_value=entries):
+			router.continue_watching_menu()
+
+	def test_it_lists_what_is_part_watched(self):
+		self._menu([self.PART_WATCHED])
+		self.assertEqual(len(self.items()), 1)
+		self.assertIn('Severance', self.items()[0]['item'].label)
+
+	def test_the_position_is_shown(self):
+		self._menu([self.PART_WATCHED])
+		self.assertIn('(42%)', self.items()[0]['item'].label)
+
+	def test_movies_and_episodes_both_render(self):
+		self._menu([self.PART_WATCHED, self.PART_MOVIE])
+		labels = [i['item'].label for i in self.items()]
+		self.assertTrue(any('Severance' in l for l in labels), labels)
+		self.assertTrue(any('Dune' in l for l in labels), labels)
+
+	def test_an_empty_list_says_so(self):
+		self._menu([])
+		self.assertEqual(self.items()[0]['item'].label, control.lang(33087))
+
+	def test_it_is_never_cached_to_disc(self):
+		# Finishing something changes this list while you are away from it.
+		self._menu([self.PART_WATCHED])
+		self.assertFalse(xbmcplugin.ENDED[0]['cacheToDisc'])
+
+	def test_entries_open_their_sources(self):
+		self._menu([self.PART_WATCHED])
+		self.assertEqual(query_of(self.items()[0]['url'])['action'], 'sources')
+
+
+class RefreshSources(AddonTestCase):
+	def test_it_clears_only_this_items_cache_then_reopens(self):
+		from resources.lib import cache, scrapers
+		cache.set(scrapers._cache_key(EPISODE), [{'hash': 'A'}])
+		other = dict(EPISODE, episode=9)
+		cache.set(scrapers._cache_key(other), [{'hash': 'B'}])
+		with mock.patch.object(router, 'sources_menu') as reopen:
+			router.refresh_sources(EPISODE)
+		self.assertEqual(cache.get(scrapers._cache_key(EPISODE)), None)
+		self.assertEqual(cache.get(scrapers._cache_key(other)), [{'hash': 'B'}])
+		reopen.assert_called_once_with(EPISODE)
+
+	def test_it_is_offered_on_episode_items(self):
+		router._add_episode_item(EPISODE, autoplay=False)
+		command = dict(self.items()[0]['item'].context)[control.lang(33086)]
+		self.assertEqual(command_query(command)['action'], 'refresh_sources')
+
+	def test_it_is_offered_on_movie_items(self):
+		router._add_movie_item(MOVIE)
+		command = dict(self.items()[0]['item'].context)[control.lang(33086)]
+		self.assertEqual(command_query(command)['action'], 'refresh_sources')
+
+
+class SeriesProgress(AddonTestCase):
+	def test_the_counter_is_shown(self):
+		router._add_episode_item(dict(EPISODE, aired_count=10,
+									  completed_count=3), autoplay=False)
+		self.assertIn('(3/10)', self.items()[0]['item'].label)
+
+	def test_it_can_be_turned_off(self):
+		self.set(**{'list.show_progress': False})
+		router._add_episode_item(dict(EPISODE, aired_count=10,
+									  completed_count=3), autoplay=False)
+		self.assertNotIn('(3/10)', self.items()[0]['item'].label)
+
+	def test_missing_counts_show_nothing(self):
+		router._add_episode_item(EPISODE, autoplay=False)
+		self.assertNotIn('/', self.items()[0]['item'].label.split(' - ')[-1])
+
+	def test_junk_counts_do_not_crash(self):
+		router._add_episode_item(dict(EPISODE, aired_count='x',
+									  completed_count=None), autoplay=False)
+		self.assertEqual(len(self.items()), 1)
+
+	def test_a_resume_suffix_replaces_the_counter(self):
+		# Continue Watching wants "how far into this episode", not
+		# "how far through the series".
+		router._add_episode_item(dict(EPISODE, aired_count=10, completed_count=3),
+								 autoplay=False, suffix='  (42%)')
+		label = self.items()[0]['item'].label
+		self.assertIn('(42%)', label)
+		self.assertNotIn('(3/10)', label)
+
+
+class Artwork(AddonTestCase):
+	ART = {'poster': 'https://m/p.jpg', 'fanart': 'https://m/f.jpg',
+		   'thumb': 'https://m/s.jpg'}
+
+	def test_episode_items_carry_their_artwork(self):
+		router._add_episode_item(dict(EPISODE, art=self.ART), autoplay=False)
+		self.assertEqual(self.items()[0]['item'].art['poster'], 'https://m/p.jpg')
+
+	def test_movie_items_carry_their_artwork(self):
+		router._add_movie_item(dict(MOVIE, art=self.ART))
+		self.assertEqual(self.items()[0]['item'].art['thumb'], 'https://m/s.jpg')
+
+	def test_an_entry_without_artwork_still_gets_the_addon_icon(self):
+		router._add_episode_item(EPISODE, autoplay=False)
+		self.assertTrue(self.items()[0]['item'].art['icon'])
+
+	def test_source_rows_inherit_the_items_artwork(self):
+		router._add_source_item({'quality': '1080p', 'hash': 'A', 'name': 'x'},
+								dict(EPISODE, art=self.ART))
+		self.assertEqual(self.items()[0]['item'].art['fanart'], 'https://m/f.jpg')
+
+
+class SeasonPackBadge(AddonTestCase):
+	def test_a_pack_is_flagged_in_the_list(self):
+		router._add_source_item({'quality': '1080p', 'hash': 'A',
+								 'name': 'Severance.S01.1080p', 'size': 9.85,
+								 'package': 'season'}, EPISODE)
+		self.assertIn(control.lang(33089), self.items()[0]['item'].label)
+
+	def test_a_single_episode_is_not_flagged(self):
+		router._add_source_item({'quality': '1080p', 'hash': 'A',
+								 'name': 'Severance.S01E03.1080p'}, EPISODE)
+		self.assertNotIn(control.lang(33089), self.items()[0]['item'].label)
+
+	def test_a_cached_pack_shows_both_badges(self):
+		router._add_source_item({'quality': '1080p', 'hash': 'A', 'name': 'x',
+								 'package': 'season', 'cached_by': ['TorBox']},
+								EPISODE, cache_known=True)
+		label = self.items()[0]['item'].label
+		self.assertIn('[TB+]', label)
+		self.assertIn(control.lang(33089), label)

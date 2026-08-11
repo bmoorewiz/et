@@ -41,6 +41,10 @@ def dispatch():
 		return hidden_shows_menu()
 	if action == 'unhide_show':
 		return unhide_show(_decode(params['entry']))
+	if action == 'continue_watching':
+		return continue_watching_menu()
+	if action == 'refresh_sources':
+		return refresh_sources(_decode(params['entry']))
 	if action == 'search_shows':
 		return search_menu('show')
 	if action == 'search_movies':
@@ -112,6 +116,9 @@ def main_menu():
 		art={'icon': control.addon_icon}, info={'plot': control.lang(33051)})
 
 	if trakt.authorized():
+		control.add_directory_item(
+			control.lang(33084), {'action': 'continue_watching'},
+			art={'icon': control.addon_icon}, info={'plot': control.lang(33085)})
 		# Hiding is otherwise only undoable on Trakt's own site, so keep a way
 		# back within reach of the list it removes shows from.
 		control.add_directory_item(
@@ -176,15 +183,43 @@ def next_episodes_menu(refresh=False):
 	control.end_directory(cache_to_disc=False, content='episodes')
 
 
-def _add_episode_item(entry, autoplay):
+def _progress_suffix(entry):
+	"""How far through the show this episode is, e.g. "3/10"."""
+	if not control.get_bool('list.show_progress', True):
+		return ''
+	total, watched = entry.get('aired_count'), entry.get('completed_count')
+	try:
+		total, watched = int(total), int(watched)
+	except (TypeError, ValueError):
+		return ''
+	if total <= 0:
+		return ''
+	return '  [COLOR grey](%d/%d)[/COLOR]' % (watched, total)
+
+
+def _resume_suffix(entry):
+	"""How far into this episode you got, for the Continue Watching list."""
+	try:
+		percent = float(entry.get('progress') or 0)
+	except (TypeError, ValueError):
+		return ''
+	if percent <= 0:
+		return ''
+	return '  [COLOR grey](%d%%)[/COLOR]' % percent
+
+
+def _add_episode_item(entry, autoplay, suffix=''):
 	# Reuse the player's label/info builders so the two never drift apart.
-	label = player.display_label(entry)
+	label = player.display_label(entry) + (suffix or _progress_suffix(entry))
 	encoded = _encode(entry)
 	info = player.media_info(entry)
 	context = [
 		(control.lang(33022),
 		 'RunPlugin(%s)' % control.build_url(
 			 {'action': 'mark_watched', 'entry': encoded})),
+		(control.lang(33086),
+		 'Container.Update(%s)' % control.build_url(
+			 {'action': 'refresh_sources', 'entry': encoded})),
 	]
 	if entry.get('show_trakt'):
 		context.append(
@@ -198,7 +233,7 @@ def _add_episode_item(entry, autoplay):
 		{'action': action, 'entry': encoded},
 		is_folder=not autoplay,
 		is_playable=autoplay,
-		art={'icon': control.addon_icon},
+		art=dict(entry.get('art') or {}),
 		info=info,
 		context=context)
 
@@ -249,27 +284,32 @@ def _add_show_item(show):
 		label,
 		{'action': 'show_seasons', 'entry': _encode(show)},
 		is_folder=True,
-		art={'icon': control.addon_icon},
+		art=dict(show.get('art') or {}),
 		info={'mediatype': 'tvshow',
 			  'title': show.get('show_title', ''),
 			  'plot': show.get('plot', '')})
 
 
-def _add_movie_item(movie):
+def _add_movie_item(movie, suffix=''):
 	year = movie.get('year')
 	label = '%s (%s)' % (movie.get('title', ''), year) if year \
 		else movie.get('title', '')
 	encoded = _encode(movie)
 	autoplay = control.get_bool('results.autoplay', False)
-	context = [(control.lang(33022),
-				'RunPlugin(%s)' % control.build_url(
-					{'action': 'mark_watched', 'entry': encoded}))]
+	context = [
+		(control.lang(33022),
+		 'RunPlugin(%s)' % control.build_url(
+			 {'action': 'mark_watched', 'entry': encoded})),
+		(control.lang(33086),
+		 'Container.Update(%s)' % control.build_url(
+			 {'action': 'refresh_sources', 'entry': encoded})),
+	]
 	control.add_directory_item(
-		label,
+		label + suffix,
 		{'action': 'autoplay' if autoplay else 'sources', 'entry': encoded},
 		is_folder=not autoplay,
 		is_playable=autoplay,
-		art={'icon': control.addon_icon},
+		art=dict(movie.get('art') or {}),
 		info={'mediatype': 'movie',
 			  'title': movie.get('title', ''),
 			  'plot': movie.get('plot', ''),
@@ -292,7 +332,7 @@ def seasons_menu(show):
 			{'action': 'season_episodes', 'entry': _encode(show),
 			 'season': str(number)},
 			is_folder=True,
-			art={'icon': control.addon_icon},
+			art=dict(show.get('art') or {}),
 			info={'mediatype': 'season',
 				  'title': control.langf(33055, number, count),
 				  'season': number,
@@ -391,6 +431,10 @@ def _add_source_item(source, entry, cache_known=False):
 	# Colour the quality badge by tier so 4K/1080p/720p are scannable at a glance.
 	quality_badge = _color('[B]%s[/B]' % quality,
 						   _QUALITY_COLOR.get(quality, _DEFAULT_QUALITY_COLOR))
+	# A pack is worth flagging: its size covers a whole season, so the size
+	# column reads oddly next to single episodes.
+	if scrapers.is_packed(source):
+		prefix += '[COLOR deepskyblue][%s][/COLOR] ' % control.lang(33089)
 	label = '%s%s | %s | S:%s | %s | [I]%s[/I]' % (
 		prefix, quality_badge, size_gb, seeders, provider,
 		source.get('name', '')[:80])
@@ -403,7 +447,7 @@ def _add_source_item(source, entry, cache_known=False):
 		{'action': 'play', 'data': payload},
 		is_folder=False,
 		is_playable=True,
-		art={'icon': control.addon_icon},
+		art=dict(entry.get('art') or {}),
 		info=player.media_info(entry))
 
 
@@ -477,6 +521,40 @@ def unhide_show(entry):
 		xbmc.executebuiltin('Container.Refresh')
 	else:
 		control.notify(33018)
+
+
+def continue_watching_menu():
+	"""Everything part-watched, from the same Trakt records resume uses."""
+	pd = control.progress_bg
+	pd.create(control.addon_name, control.lang(33009))
+	try:
+		entries = trakt.in_progress()
+	finally:
+		pd.close()
+
+	if not entries:
+		control.add_directory_item(control.lang(33087),
+								   {'action': 'refresh'}, is_folder=False)
+		control.end_directory(cache_to_disc=False, content='')
+		return
+
+	autoplay = control.get_bool('results.autoplay', False)
+	for entry in entries:
+		suffix = _resume_suffix(entry)
+		if player.is_movie(entry):
+			_add_movie_item(entry, suffix=suffix)
+		else:
+			_add_episode_item(entry, autoplay, suffix=suffix)
+	# Same reasoning as Next Episodes: finishing something changes this list
+	# while you are away from it.
+	control.end_directory(cache_to_disc=False, content='videos')
+
+
+def refresh_sources(entry):
+	"""Throw away this item's cached source list and scrape it again."""
+	scrapers.forget(entry)
+	control.notify(33088)
+	sources_menu(entry)
 
 
 def hidden_shows_menu():

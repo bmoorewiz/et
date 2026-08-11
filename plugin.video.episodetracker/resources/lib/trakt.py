@@ -235,7 +235,51 @@ def _request(method, path, params=None, payload=None, auth=True, retry=True):
 # ---------------------------------------------------------------------------
 
 def _watched_shows():
-	return _request('GET', '/sync/watched/shows', params={'extended': 'noseasons'}) or []
+	# 'full' rather than 'noseasons' so the show objects carry their images.
+	# Trakt serves poster/fanart/logo itself now, so artwork costs nothing
+	# beyond this one flag - no second metadata provider, no extra request.
+	return _request('GET', '/sync/watched/shows', params={'extended': 'full'}) or []
+
+
+# Trakt returns image paths without a scheme, e.g.
+# "media.trakt.tv/images/shows/000/154/997/posters/medium/f60ddb06de.jpg.webp"
+def _image(images, *names):
+	"""First usable URL among the named image types."""
+	for name in names:
+		urls = (images or {}).get(name) or []
+		for url in urls:
+			if url:
+				return url if url.startswith('http') else 'https://' + url
+	return ''
+
+
+def show_art(show):
+	"""Kodi art dict for a show.
+
+	Deliberately only four keys. Every entry gets base64-encoded into the
+	plugin:// URL of each of its list items, and a source list can be 150
+	rows deep, so each extra image URL is paid for many times over. Skins
+	derive banner and clearart from these anyway.
+	"""
+	images = show.get('images') or {}
+	art = {
+		'poster': _image(images, 'poster'),
+		'fanart': _image(images, 'fanart'),
+		'clearlogo': _image(images, 'logo'),
+		'thumb': _image(images, 'thumb', 'poster'),
+	}
+	return {key: value for key, value in art.items() if value}
+
+
+def episode_art(episode, show=None):
+	"""Kodi art for an episode: its own screenshot over the show's artwork."""
+	art = show_art(show or {})
+	screenshot = _image(episode.get('images') or {}, 'screenshot')
+	if screenshot:
+		# The episode still is the thumb; the show's own thumb is a poor
+		# substitute for it but a fine fallback.
+		art['thumb'] = screenshot
+	return art
 
 
 def _show_progress(trakt_id):
@@ -274,6 +318,8 @@ def _build_entry(show, progress):
 				next_ep['runtime'] = detail.get('runtime')
 			if not next_ep.get('overview'):
 				next_ep['overview'] = detail.get('overview') or ''
+			if not next_ep.get('images'):
+				next_ep['images'] = detail.get('images') or {}
 
 	ep_ids = next_ep.get('ids', {})
 	return {
@@ -301,6 +347,7 @@ def _build_entry(show, progress):
 		# "nothing has aired".
 		'aired_count': (progress or {}).get('aired'),
 		'completed_count': (progress or {}).get('completed'),
+		'art': episode_art(next_ep, show),
 	}
 
 
@@ -465,6 +512,7 @@ def search_shows(query, limit=40):
 			'show_tmdb': ids.get('tmdb'),
 			'plot': show.get('overview', '') or '',
 			'seasons_count': show.get('aired_episodes'),
+			'art': show_art(show),
 		})
 	return shows
 
@@ -490,6 +538,7 @@ def search_movies(query, limit=40):
 			'plot': movie.get('overview', '') or '',
 			'runtime': movie.get('runtime'),
 			'released': movie.get('released', '') or '',
+			'art': show_art(movie),
 		})
 	return movies
 
@@ -510,6 +559,7 @@ def season_episodes(show, season_number):
 	entries = []
 	for episode in episodes:
 		ids = _ids(episode)
+		screenshot = _image(episode.get('images') or {}, 'screenshot')
 		entries.append({
 			'media_type': 'episode',
 			'show_title': show.get('show_title', ''),
@@ -528,6 +578,10 @@ def season_episodes(show, season_number):
 			'first_aired': episode.get('first_aired'),
 			'runtime': episode.get('runtime'),
 			'plot': episode.get('overview', '') or '',
+			# The show's artwork was already resolved when it was searched
+			# for; only the episode still is its own.
+			'art': dict(show.get('art') or {},
+						**({'thumb': screenshot} if screenshot else {})),
 		})
 	return entries
 
@@ -602,6 +656,81 @@ def playback_progress(entry):
 			except (TypeError, ValueError):
 				return 0.0
 	return 0.0
+
+
+def in_progress(limit=100):
+	"""Everything part-watched, per Trakt, newest first.
+
+	The same ``/sync/playback`` records that drive the resume prompt, listed
+	as a menu of their own - so picking up something half-finished does not
+	mean remembering which show it was and navigating back to it.
+	"""
+	if not authorized():
+		return []
+	entries = []
+	for kind in ('episodes', 'movies'):
+		items = _request('GET', '/sync/playback/%s' % kind,
+						 params={'limit': limit, 'extended': 'full'})
+		if not isinstance(items, list):
+			continue
+		for item in items:
+			entry = _playback_entry(item)
+			if entry:
+				entries.append(entry)
+	entries.sort(key=lambda e: e.get('paused_at') or '', reverse=True)
+	return entries
+
+
+def _playback_entry(item):
+	"""Turn one /sync/playback record into a playable entry."""
+	try:
+		progress = float(item.get('progress') or 0)
+	except (TypeError, ValueError):
+		progress = 0.0
+	shared = {'progress': progress, 'paused_at': item.get('paused_at') or ''}
+
+	movie = item.get('movie')
+	if movie:
+		ids = _ids(movie)
+		return dict(shared, **{
+			'media_type': 'movie',
+			'title': movie.get('title', ''),
+			'year': movie.get('year'),
+			'movie_trakt': ids.get('trakt'),
+			'movie_slug': ids.get('slug'),
+			'imdb': ids.get('imdb'),
+			'tmdb': ids.get('tmdb'),
+			'plot': movie.get('overview', '') or '',
+			'runtime': movie.get('runtime'),
+			'released': movie.get('released', '') or '',
+			'art': show_art(movie),
+		})
+
+	episode, show = item.get('episode'), item.get('show')
+	if not episode or not show:
+		return None
+	ep_ids, show_ids = _ids(episode), _ids(show)
+	return dict(shared, **{
+		'media_type': 'episode',
+		'show_title': show.get('title', ''),
+		'show_year': show.get('year'),
+		'show_trakt': show_ids.get('trakt'),
+		'show_slug': show_ids.get('slug'),
+		'show_imdb': show_ids.get('imdb'),
+		'show_tvdb': show_ids.get('tvdb'),
+		'show_tmdb': show_ids.get('tmdb'),
+		'season': episode.get('season'),
+		'episode': episode.get('number'),
+		'ep_title': episode.get('title') or 'Episode %s' % episode.get('number'),
+		'ep_trakt': ep_ids.get('trakt'),
+		'ep_imdb': ep_ids.get('imdb'),
+		'ep_tvdb': ep_ids.get('tvdb'),
+		'ep_tmdb': ep_ids.get('tmdb'),
+		'first_aired': episode.get('first_aired'),
+		'runtime': episode.get('runtime'),
+		'plot': episode.get('overview', '') or '',
+		'art': episode_art(episode, show),
+	})
 
 
 def clear_playback(entry):
