@@ -21,6 +21,29 @@ _decode = control.decode_obj
 
 
 def dispatch():
+	"""Route one plugin:// request, and never leave the directory unclosed.
+
+	If an exception escapes, Kodi never gets its endOfDirectory, so
+	CPluginDirectory reports failure and CGUIMediaWindow::Update() responds
+	by logging an error and falling back to the add-on's root - the user
+	gets dumped on the main screen with no idea why. Closing the directory
+	with the reason in it turns any crash into something readable, in the
+	place the user was already looking.
+	"""
+	try:
+		return _dispatch()
+	except Exception as exc:
+		control.error('request failed: %s' % (sys.argv[2:] or ''))
+		if control.handle >= 0:
+			control.add_directory_item('[COLOR red]%s[/COLOR]'
+									   % control.langf(33092, exc),
+									   {'action': 'settings'}, is_folder=False)
+			control.end_directory(cache_to_disc=False, content='')
+		else:
+			control.ok_dialog(control.langf(33092, exc))
+
+
+def _dispatch():
 	params = control.parse_params(sys.argv[2] if len(sys.argv) > 2 else '')
 	action = params.get('action')
 
@@ -171,10 +194,7 @@ def next_episodes_menu(refresh=False):
 		pd.close()
 
 	if not entries:
-		control.add_directory_item(control.lang(33010),
-								   {'action': 'refresh'}, is_folder=False)
-		control.end_directory(cache_to_disc=False, content='')
-		return
+		return nothing_here(33010)
 
 	autoplay = control.get_bool('results.autoplay', False)
 	for entry in entries:
@@ -243,12 +263,22 @@ def _add_episode_item(entry, autoplay, suffix=''):
 # ---------------------------------------------------------------------------
 
 def search_menu(media_type):
-	"""Prompt for a query, then list matching shows or movies."""
+	"""Prompt for a query, then list matching shows or movies.
+
+	Cancelling the keyboard must not end up handing Kodi an empty
+	directory. Kodi has already committed to navigating into this folder by
+	the time the prompt appears, so an empty listing drops the user on a
+	blank screen they never asked for - and returning a *failed* directory
+	instead is worse, because CGUIMediaWindow::Update() responds to that by
+	logging an error and falling back to the add-on's root. Either way the
+	user is somewhere they did not choose to be, which is what "hitting
+	back errors out to the main screen" was. So there is always something
+	in the listing, and Back from it behaves normally.
+	"""
 	heading = control.lang(33050 if media_type == 'show' else 33051)
 	query = control.keyboard(heading=heading)
 	if not query:
-		control.end_directory(cache_to_disc=False, content='')
-		return
+		return search_again_menu(media_type)
 
 	pd = control.progress_bg
 	pd.create(control.addon_name, control.langf(33052, query))
@@ -261,9 +291,8 @@ def search_menu(media_type):
 		pd.close()
 
 	if not results:
-		control.ok_dialog(control.langf(33053, query))
-		control.end_directory(cache_to_disc=False, content='')
-		return
+		control.notify(control.langf(33053, query))
+		return search_again_menu(media_type)
 
 	for item in results:
 		if media_type == 'show':
@@ -274,6 +303,37 @@ def search_menu(media_type):
 	# search results are query-specific; caching them to disc is unhelpful
 	control.end_directory(cache_to_disc=False,
 						  content='tvshows' if media_type == 'show' else 'movies')
+
+
+def nothing_here(message, params=None):
+	"""Close a folder with the reason in it, never with nothing at all.
+
+	By the time a handler discovers it has nothing to show, Kodi has
+	already navigated into the folder - it cannot be told to stay put. An
+	empty listing therefore reads as a blank screen or a failure, so every
+	dead end says what happened instead.
+	"""
+	if isinstance(message, int):
+		message = control.lang(message)
+	control.add_directory_item(message, params or {'action': 'refresh'},
+							   is_folder=False,
+							   art={'icon': control.addon_icon},
+							   info={'plot': message})
+	control.end_directory(cache_to_disc=False, content='')
+
+
+def search_again_menu(media_type):
+	"""A one-item listing offering another go at the search.
+
+	Somewhere to land when a search is cancelled or finds nothing. Kodi is
+	already navigating into this folder and cannot be told otherwise, so
+	the only choice is what it navigates into.
+	"""
+	action = 'search_shows' if media_type == 'show' else 'search_movies'
+	control.add_directory_item(control.lang(33090), {'action': action},
+							   art={'icon': control.addon_icon},
+							   info={'plot': control.lang(33091)})
+	control.end_directory(cache_to_disc=False, content='')
 
 
 def _add_show_item(show):
@@ -321,9 +381,7 @@ def _add_movie_item(movie, suffix=''):
 def seasons_menu(show):
 	seasons = trakt.show_seasons(show.get('show_trakt') or show.get('show_slug'))
 	if not seasons:
-		control.notify(33054)
-		control.end_directory(cache_to_disc=False, content='')
-		return
+		return nothing_here(33054)
 	for season in seasons:
 		number = season.get('number')
 		count = season.get('episode_count') or 0
@@ -343,9 +401,7 @@ def seasons_menu(show):
 def episodes_menu(show, season_number):
 	entries = trakt.season_episodes(show, season_number)
 	if not entries:
-		control.notify(33054)
-		control.end_directory(cache_to_disc=False, content='')
-		return
+		return nothing_here(33054)
 	autoplay = control.get_bool('results.autoplay', False)
 	for entry in entries:
 		_add_episode_item(entry, autoplay)
@@ -354,8 +410,7 @@ def episodes_menu(show, season_number):
 
 def sources_menu(entry):
 	if not _preflight():
-		control.end_directory(content='')
-		return
+		return nothing_here(33093, {'action': 'settings'})
 
 	pd = control.progress_bg
 	pd.create(control.addon_name, control.lang(33011))
@@ -369,24 +424,17 @@ def sources_menu(entry):
 		pd.close()
 
 	if sources is scrapers.MODULE_MISSING:
-		control.ok_dialog(33008)
-		control.end_directory(content='')
-		return
+		return nothing_here(33008, {'action': 'settings'})
 	if sources == scrapers.NO_PROVIDERS:
 		if control.yesno_dialog(33042):
 			scrapers.open_settings()
-		control.end_directory(content='')
-		return
+		return nothing_here(33008, {'action': 'coco_settings'})
 	if not sources:
-		control.notify(33012)
-		control.end_directory(content='')
-		return
+		return nothing_here(33012)
 
 	sources, cache_known = scrapers.annotate_cached(sources)
 	if not sources:
-		control.notify(33045)
-		control.end_directory(content='')
-		return
+		return nothing_here(33045, {'action': 'settings'})
 
 	for source in sources:
 		_add_source_item(source, entry, cache_known)
@@ -533,10 +581,7 @@ def continue_watching_menu():
 		pd.close()
 
 	if not entries:
-		control.add_directory_item(control.lang(33087),
-								   {'action': 'refresh'}, is_folder=False)
-		control.end_directory(cache_to_disc=False, content='')
-		return
+		return nothing_here(33087)
 
 	autoplay = control.get_bool('results.autoplay', False)
 	for entry in entries:
@@ -560,10 +605,7 @@ def refresh_sources(entry):
 def hidden_shows_menu():
 	shows = trakt.hidden_shows()
 	if not shows:
-		control.add_directory_item(control.lang(33081),
-								   {'action': 'refresh'}, is_folder=False)
-		control.end_directory(cache_to_disc=False, content='')
-		return
+		return nothing_here(33081)
 	for show in shows:
 		year = show.get('show_year')
 		label = '%s (%s)' % (show.get('show_title', ''), year) if year \

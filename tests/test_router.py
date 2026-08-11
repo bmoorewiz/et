@@ -4,6 +4,7 @@
 import sys
 from unittest import mock
 
+import xbmcgui
 import xbmcplugin
 
 from support import AddonTestCase
@@ -449,3 +450,186 @@ class SeasonPackBadge(AddonTestCase):
 		label = self.items()[0]['item'].label
 		self.assertIn('[TB+]', label)
 		self.assertIn(control.lang(33089), label)
+
+
+class NoBlankScreens(AddonTestCase):
+	"""A folder must never be closed with nothing in it.
+
+	Reported: cancelling a search "errors out to the main screen instead
+	of going back". By the time a handler knows it has nothing to show,
+	Kodi has already committed to navigating into the folder - it cannot
+	be told to stay put. An empty listing is a blank screen, and closing
+	the folder as *failed* is worse: CGUIMediaWindow::Update() logs an
+	error and falls back to the add-on's root.
+	"""
+
+	def _folders(self):
+		"""Every handler that closes a directory, and how to reach a dead end."""
+		return [
+			('cancelled show search', lambda: router.search_menu('show')),
+			('cancelled movie search', lambda: router.search_menu('movie')),
+			('search with no results', self._empty_search),
+			('no seasons', self._no_seasons),
+			('no episodes', self._no_episodes),
+			('no next episodes', self._no_next_episodes),
+			('nothing part-watched', self._nothing_in_progress),
+			('no hidden shows', self._no_hidden),
+			('preflight refuses', self._preflight_fails),
+			('cocoscrapers missing', self._no_module),
+			('no sources', self._no_sources),
+			('no cached sources', self._no_cached_sources),
+		]
+
+	def _empty_search(self):
+		xbmcgui.INPUT_QUEUE.append('nothing matches this')
+		with mock.patch('resources.lib.trakt.search_shows', return_value=[]):
+			router.search_menu('show')
+
+	def _no_seasons(self):
+		with mock.patch('resources.lib.trakt.show_seasons', return_value=[]):
+			router.seasons_menu(SHOW)
+
+	def _no_episodes(self):
+		with mock.patch('resources.lib.trakt.season_episodes', return_value=[]):
+			router.episodes_menu(SHOW, '1')
+
+	def _no_next_episodes(self):
+		self.set(**{'trakt.token': 'token'})
+		with mock.patch('resources.lib.trakt.next_episodes', return_value=[]):
+			router.next_episodes_menu()
+
+	def _nothing_in_progress(self):
+		with mock.patch('resources.lib.trakt.in_progress', return_value=[]):
+			router.continue_watching_menu()
+
+	def _no_hidden(self):
+		with mock.patch('resources.lib.trakt.hidden_shows', return_value=[]):
+			router.hidden_shows_menu()
+
+	def _preflight_fails(self):
+		with mock.patch.object(router, '_preflight', return_value=False):
+			router.sources_menu(EPISODE)
+
+	def _no_module(self):
+		from resources.lib import scrapers
+		with mock.patch.object(router, '_preflight', return_value=True), \
+				mock.patch.object(scrapers, 'scrape',
+								  return_value=scrapers.MODULE_MISSING):
+			router.sources_menu(EPISODE)
+
+	def _no_sources(self):
+		from resources.lib import scrapers
+		with mock.patch.object(router, '_preflight', return_value=True), \
+				mock.patch.object(scrapers, 'scrape', return_value=[]):
+			router.sources_menu(EPISODE)
+
+	def _no_cached_sources(self):
+		from resources.lib import scrapers
+		with mock.patch.object(router, '_preflight', return_value=True), \
+				mock.patch.object(scrapers, 'scrape', return_value=[{'hash': 'A'}]), \
+				mock.patch.object(scrapers, 'annotate_cached', return_value=([], True)):
+			router.sources_menu(EPISODE)
+
+	def test_no_dead_end_hands_kodi_an_empty_listing(self):
+		for name, run in self._folders():
+			xbmcplugin.reset()
+			xbmcgui.reset()
+			run()
+			self.assertTrue(self.items(), '%s produced a blank screen' % name)
+			self.assertTrue(self.items()[0]['item'].label,
+							'%s produced an unlabelled item' % name)
+
+	def test_every_dead_end_still_succeeds(self):
+		# Closing the folder as failed makes Kodi fall back to the root and
+		# show an error - exactly the reported symptom.
+		for name, run in self._folders():
+			xbmcplugin.reset()
+			xbmcgui.reset()
+			run()
+			self.assertTrue(xbmcplugin.ENDED, '%s never closed the folder' % name)
+			self.assertTrue(xbmcplugin.ENDED[-1]['succeeded'],
+							'%s closed the folder as failed' % name)
+
+
+class CancelledSearch(AddonTestCase):
+	def test_it_offers_another_go(self):
+		router.search_menu('show')
+		self.assertEqual(self.items()[0]['item'].label, control.lang(33090))
+
+	def test_that_offer_reopens_the_same_search(self):
+		router.search_menu('movie')
+		self.assertEqual(query_of(self.items()[0]['url'])['action'],
+						 'search_movies')
+
+	def test_no_search_request_is_made(self):
+		with mock.patch('resources.lib.trakt.search_shows') as search:
+			router.search_menu('show')
+		search.assert_not_called()
+
+	def test_nothing_found_lands_in_the_same_place(self):
+		xbmcgui.INPUT_QUEUE.append('zzzz')
+		with mock.patch('resources.lib.trakt.search_movies', return_value=[]):
+			router.search_menu('movie')
+		self.assertEqual(self.items()[0]['item'].label, control.lang(33090))
+		# A notification, not a modal the user has to dismiss first.
+		self.assertEqual(self.dialogs('ok'), [])
+
+
+class DispatchSafetyNet(AddonTestCase):
+	"""A crash must not leave the directory unclosed.
+
+	Kodi treats a plugin that never calls endOfDirectory as a failure and
+	falls back to the add-on's root, so a bug anywhere becomes "it dumped
+	me on the main screen" with no explanation.
+	"""
+
+	def _dispatch(self, handle=1, **params):
+		# control.handle is read from sys.argv once at import, exactly as it
+		# is in Kodi, so a test that changes argv has to move it too.
+		query = '?' + '&'.join('%s=%s' % pair for pair in params.items())
+		with mock.patch.object(sys, 'argv',
+							   ['plugin://plugin.video.episodetracker/',
+								str(handle), query]), \
+				mock.patch.object(control, 'handle', handle):
+			router.dispatch()
+
+	def test_a_runplugin_action_reports_through_a_dialog_instead(self):
+		# RunPlugin invocations get handle -1; there is no directory to close.
+		with mock.patch.object(router, 'mark_watched',
+							   side_effect=RuntimeError('boom')):
+			self._dispatch(handle=-1, action='mark_watched',
+						   entry=control.encode_obj(EPISODE))
+		self.assertEqual(xbmcplugin.ENDED, [])
+		self.assertIn('boom', self.last_dialog('ok')[2])
+
+	def test_a_crashing_handler_still_closes_the_folder(self):
+		with mock.patch.object(router, 'next_episodes_menu',
+							   side_effect=RuntimeError('boom')):
+			self._dispatch(action='next_episodes')
+		self.assertTrue(xbmcplugin.ENDED)
+		self.assertTrue(xbmcplugin.ENDED[-1]['succeeded'])
+
+	def test_the_reason_is_shown_where_the_user_is_looking(self):
+		with mock.patch.object(router, 'next_episodes_menu',
+							   side_effect=RuntimeError('boom')):
+			self._dispatch(action='next_episodes')
+		self.assertIn('boom', self.items()[0]['item'].label)
+
+	def test_a_malformed_request_does_not_crash_out(self):
+		self._dispatch(action='sources', entry='not-valid-base64!!')
+		self.assertTrue(xbmcplugin.ENDED[-1]['succeeded'])
+
+	def test_a_missing_parameter_does_not_crash_out(self):
+		self._dispatch(action='season_episodes')
+		self.assertTrue(xbmcplugin.ENDED[-1]['succeeded'])
+
+	def test_the_failure_is_logged(self):
+		with mock.patch.object(router, 'next_episodes_menu',
+							   side_effect=RuntimeError('boom')):
+			self._dispatch(action='next_episodes')
+		self.assertIn('request failed', self.logged())
+
+	def test_a_working_request_is_untouched(self):
+		with mock.patch.object(router, 'next_episodes_menu') as handler:
+			self._dispatch(action='next_episodes')
+		handler.assert_called_once()

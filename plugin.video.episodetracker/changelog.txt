@@ -1,3 +1,20 @@
+v1.8.1
+- Fixed backing out of a search dumping you on the main screen. Cancelling
+  the keyboard handed Kodi an empty folder, which it had already committed
+  to opening, so you landed on a blank screen instead of where you were.
+  Cancelling now offers another go at the search, and Back from there
+  behaves normally.
+- The same blank screen could appear anywhere the add-on had nothing to
+  show - no seasons, no sources, nothing part-watched, CocoScrapers not
+  installed. Every one of those now says what happened instead of showing
+  an empty list.
+- A search that finds nothing no longer interrupts with a dialog you have
+  to dismiss before you can try again.
+- Any unexpected error now reports itself in the list you were looking at.
+  Previously a crash left Kodi with no reply, and Kodi's own response to
+  that is to log an error and jump to the add-on's main screen - which is
+  what "it errors out to the main screen" looked like.
+
 v1.8.0
 - Season packs. The add-on now also asks each provider for a season pack
   containing the episode you want, which for older or thinly-seeded shows

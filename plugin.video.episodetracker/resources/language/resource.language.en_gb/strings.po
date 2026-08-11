@@ -611,3 +611,19 @@ msgstr ""
 msgctxt "#33089"
 msgid "SEASON PACK"
 msgstr ""
+
+msgctxt "#33090"
+msgid "New search..."
+msgstr ""
+
+msgctxt "#33091"
+msgid "Search again."
+msgstr ""
+
+msgctxt "#33092"
+msgid "Something went wrong: %s"
+msgstr ""
+
+msgctxt "#33093"
+msgid "Not set up yet. Open Settings to finish signing in."
+msgstr ""
