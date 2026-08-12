@@ -1,3 +1,15 @@
+v1.9.0
+- "Browse seasons" on an episode's context menu, opening that show's
+  seasons and every episode in them - so you can reach any episode of a
+  show without searching for it again.
+- Browsed episodes now show which ones you have already watched.
+- "Mark watched up to here" on an episode's context menu, which marks
+  every earlier episode of the show as watched in one go. For a show
+  picked up part-way through, that was previously one episode at a time.
+- It tells you how many episodes it will mark before doing anything, and
+  skips ones already watched - Trakt's history records viewings rather
+  than flags, so re-adding an episode would count as watching it twice.
+
 v1.8.1
 - Fixed backing out of a search dumping you on the main screen. Cancelling
   the keyboard handed Kodi an empty folder, which it had already committed

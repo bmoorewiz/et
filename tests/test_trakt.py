@@ -641,3 +641,159 @@ class InProgress(TraktBase):
 		self.set(**{'trakt.token': ''})
 		self.assertEqual(trakt.in_progress(), [])
 		self.assertEqual(self.api.calls, [])
+
+
+class EpisodesThrough(AddonTestCase):
+	"""Building the "everything up to here" history payload."""
+
+	SEASONS = [
+		{'number': 1, 'episode_count': 9, 'aired_episodes': 9},
+		{'number': 2, 'episode_count': 10, 'aired_episodes': 10},
+		{'number': 3, 'episode_count': 0, 'aired_episodes': 0},
+	]
+
+	def numbers(self, payload):
+		return {s['number']: [e['number'] for e in s['episodes']] for s in payload}
+
+	def test_earlier_seasons_are_covered_in_full(self):
+		payload = trakt.episodes_through(self.SEASONS, 2, 3)
+		self.assertEqual(self.numbers(payload)[1], list(range(1, 10)))
+
+	def test_the_target_season_stops_at_the_episode(self):
+		payload = trakt.episodes_through(self.SEASONS, 2, 3)
+		self.assertEqual(self.numbers(payload)[2], [1, 2, 3])
+
+	def test_later_seasons_are_not_touched(self):
+		payload = trakt.episodes_through(self.SEASONS, 2, 3)
+		self.assertNotIn(3, self.numbers(payload))
+
+	def test_specials_are_never_included(self):
+		seasons = [{'number': 0, 'aired_episodes': 5}] + self.SEASONS
+		self.assertNotIn(0, self.numbers(trakt.episodes_through(seasons, 2, 3)))
+
+	def test_unaired_episodes_of_an_earlier_season_are_excluded(self):
+		seasons = [{'number': 1, 'episode_count': 10, 'aired_episodes': 4},
+				   {'number': 2, 'episode_count': 8, 'aired_episodes': 8}]
+		self.assertEqual(self.numbers(trakt.episodes_through(seasons, 2, 1))[1],
+						 [1, 2, 3, 4])
+
+	def test_already_watched_episodes_are_left_out(self):
+		# Trakt's history is a list of plays, so re-adding one records a
+		# second viewing rather than confirming the first.
+		watched = {(1, 1): True, (1, 2): True, (2, 1): True}
+		payload = trakt.episodes_through(self.SEASONS, 2, 3, watched)
+		self.assertEqual(self.numbers(payload)[1], list(range(3, 10)))
+		self.assertEqual(self.numbers(payload)[2], [2, 3])
+
+	def test_a_fully_watched_season_disappears_entirely(self):
+		watched = {(1, n): True for n in range(1, 10)}
+		self.assertNotIn(1, self.numbers(trakt.episodes_through(
+			self.SEASONS, 2, 3, watched)))
+
+	def test_nothing_left_to_mark_is_an_empty_payload(self):
+		watched = {(1, n): True for n in range(1, 10)}
+		watched.update({(2, n): True for n in (1, 2, 3)})
+		self.assertEqual(trakt.episodes_through(self.SEASONS, 2, 3, watched), [])
+
+	def test_the_first_episode_of_the_first_season_marks_only_itself(self):
+		self.assertEqual(self.numbers(trakt.episodes_through(self.SEASONS, 1, 1)),
+						 {1: [1]})
+
+	def test_junk_targets_produce_nothing(self):
+		self.assertEqual(trakt.episodes_through(self.SEASONS, None, 3), [])
+		self.assertEqual(trakt.episodes_through(self.SEASONS, 'x', 'y'), [])
+
+	def test_junk_season_data_is_skipped(self):
+		seasons = [{'number': 'x'}, {'number': 1, 'aired_episodes': 'lots'},
+				   {'number': 2, 'aired_episodes': 4}]
+		self.assertEqual(self.numbers(trakt.episodes_through(seasons, 2, 2)),
+						 {2: [1, 2]})
+
+
+class MarkWatchedThrough(TraktBase):
+	EPISODE = dict(EPISODE, show_slug='severance', season=2, episode=3)
+
+	def _routes(self, watched=None):
+		self.api.route('GET', '/shows/111/seasons', [
+			{'number': 1, 'episode_count': 9, 'aired_episodes': 9},
+			{'number': 2, 'episode_count': 10, 'aired_episodes': 10}])
+		self.api.route('GET', '/shows/111/progress/watched',
+					   {'seasons': watched or []})
+		self.api.route('POST', '/sync/history', {'added': {'episodes': 12}})
+
+	def test_it_counts_what_would_be_added(self):
+		self._routes()
+		count, _seasons = trakt.count_unwatched_through(self.EPISODE)
+		self.assertEqual(count, 12)  # 9 + 3
+
+	def test_the_count_excludes_what_is_already_watched(self):
+		self._routes(watched=[
+			{'number': 1, 'episodes': [{'number': n, 'completed': True}
+									   for n in range(1, 10)]}])
+		count, _seasons = trakt.count_unwatched_through(self.EPISODE)
+		self.assertEqual(count, 3)
+
+	def test_it_posts_one_request_for_the_whole_back_catalogue(self):
+		self._routes()
+		self.assertEqual(trakt.mark_watched_through(self.EPISODE), 12)
+		posts = [c for c in self.api.calls if c['method'] == 'POST']
+		self.assertEqual(len(posts), 1)
+
+	def test_the_payload_is_a_show_with_nested_seasons(self):
+		self._routes()
+		trakt.mark_watched_through(self.EPISODE)
+		body = self.api.sent('POST', '/sync/history')['json']
+		self.assertEqual(body['shows'][0]['ids']['trakt'], 111)
+		self.assertEqual([s['number'] for s in body['shows'][0]['seasons']], [1, 2])
+
+	def test_the_next_up_cache_is_invalidated(self):
+		from resources.lib import cache
+		cache.set('trakt_next_tester', [{'show_title': 'X'}])
+		self._routes()
+		trakt.mark_watched_through(self.EPISODE)
+		self.assertIsNone(cache.get('trakt_next_tester'))
+
+	def test_nothing_to_do_posts_nothing(self):
+		self._routes(watched=[
+			{'number': 1, 'episodes': [{'number': n, 'completed': True}
+									   for n in range(1, 10)]},
+			{'number': 2, 'episodes': [{'number': n, 'completed': True}
+									   for n in (1, 2, 3)]}])
+		self.assertEqual(trakt.mark_watched_through(self.EPISODE), 0)
+		self.assertIsNone(self.api.sent('POST', '/sync/history'))
+
+	def test_a_movie_is_refused(self):
+		self.assertEqual(trakt.mark_watched_through(MOVIE), 0)
+		self.assertEqual(self.api.calls, [])
+
+	def test_unauthorized_never_calls_out(self):
+		self.set(**{'trakt.token': ''})
+		self.assertEqual(trakt.mark_watched_through(self.EPISODE), 0)
+		self.assertEqual(self.api.calls, [])
+
+	def test_a_failed_post_reports_nothing_marked(self):
+		self._routes()
+		self.api.route('POST', '/sync/history', None, 500)
+		self.assertEqual(trakt.mark_watched_through(self.EPISODE), 0)
+
+
+class WatchedState(TraktBase):
+	def test_browsing_a_season_shows_what_is_watched(self):
+		self.api.route('GET', '/shows/111/seasons/1/episodes', [
+			{'season': 1, 'number': 1, 'title': 'One', 'ids': {'trakt': 1}},
+			{'season': 1, 'number': 2, 'title': 'Two', 'ids': {'trakt': 2}}])
+		self.api.route('GET', '/shows/111/progress/watched', {'seasons': [
+			{'number': 1, 'episodes': [{'number': 1, 'completed': True},
+									   {'number': 2, 'completed': False}]}]})
+		entries = trakt.season_episodes({'show_trakt': 111}, 1)
+		self.assertEqual([e['watched'] for e in entries], [True, False])
+
+	def test_the_watched_map_covers_every_season(self):
+		self.api.route('GET', '/shows/111/progress/watched', {'seasons': [
+			{'number': 1, 'episodes': [{'number': 1, 'completed': True}]},
+			{'number': 2, 'episodes': [{'number': 5, 'completed': True}]}]})
+		self.assertEqual(trakt.watched_map(111), {(1, 1): True, (2, 5): True})
+
+	def test_a_failed_progress_call_is_empty_not_broken(self):
+		self.api.route('GET', '/shows/111/progress/watched', None, 500)
+		self.assertEqual(trakt.watched_map(111), {})

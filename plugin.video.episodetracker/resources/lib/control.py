@@ -222,6 +222,7 @@ def _apply_info_tag(tag, info):
 		'premiered': tag.setPremiered,
 		'mediatype': tag.setMediaType,
 		'duration': tag.setDuration,
+		'playcount': tag.setPlaycount,
 	}
 	for key, value in info.items():
 		if value in (None, ''):
@@ -230,7 +231,7 @@ def _apply_info_tag(tag, info):
 		if not fn:
 			continue
 		try:
-			if key in ('season', 'episode', 'duration'):
+			if key in ('season', 'episode', 'duration', 'playcount'):
 				fn(int(value))
 			else:
 				fn(value)

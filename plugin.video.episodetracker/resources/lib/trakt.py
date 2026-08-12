@@ -556,6 +556,9 @@ def season_episodes(show, season_number):
 	episodes = _request('GET', '/shows/%s/seasons/%s/episodes'
 						% (show_id, season_number), auth=False,
 						params={'extended': 'full'}) or []
+	# One extra call for the whole season, so browsing shows what has
+	# already been watched rather than an undifferentiated list.
+	watched = watched_map(show_id) if authorized() else {}
 	entries = []
 	for episode in episodes:
 		ids = _ids(episode)
@@ -582,8 +585,104 @@ def season_episodes(show, season_number):
 			# for; only the episode still is its own.
 			'art': dict(show.get('art') or {},
 						**({'thumb': screenshot} if screenshot else {})),
+			'watched': bool(watched.get((episode.get('season'),
+										 episode.get('number')))),
 		})
 	return entries
+
+
+def watched_map(show_id):
+	"""``{(season, episode): True}`` for everything watched of this show."""
+	progress = _show_progress(show_id) or {}
+	watched = {}
+	for season in progress.get('seasons') or []:
+		number = season.get('number')
+		for episode in season.get('episodes') or []:
+			if episode.get('completed'):
+				watched[(number, episode.get('number'))] = True
+	return watched
+
+
+def episodes_through(seasons, target_season, target_episode, watched=None):
+	"""Season/episode payload for everything up to and including one episode.
+
+	Already-watched episodes are left out. Trakt's history is a list of
+	plays, not a set of flags, so re-adding one does not "confirm" it -
+	it records a second viewing and inflates the play count.
+	"""
+	try:
+		target_season = int(target_season)
+		target_episode = int(target_episode)
+	except (TypeError, ValueError):
+		return []
+	watched = watched or {}
+	payload = []
+	for season in seasons:
+		try:
+			number = int(season.get('number'))
+		except (TypeError, ValueError):
+			continue
+		# Specials are numbered 0 and are not "before" anything.
+		if number < 1 or number > target_season:
+			continue
+		if number == target_season:
+			last = target_episode
+		else:
+			# Only what has aired: an episode that does not exist yet
+			# cannot have been watched.
+			last = season.get('aired_episodes')
+			if last is None:
+				last = season.get('episode_count')
+		try:
+			last = int(last or 0)
+		except (TypeError, ValueError):
+			last = 0
+		episodes = [{'number': n} for n in range(1, last + 1)
+					if not watched.get((number, n))]
+		if episodes:
+			payload.append({'number': number, 'episodes': episodes})
+	return payload
+
+
+def _show_ref(entry):
+	"""Trakt id reference for an entry's show."""
+	ids = {}
+	for src, key in (('show_trakt', 'trakt'), ('show_imdb', 'imdb'),
+					 ('show_tvdb', 'tvdb'), ('show_slug', 'slug')):
+		if entry.get(src):
+			ids[key] = entry[src]
+	return ids
+
+
+def count_unwatched_through(entry):
+	"""How many episodes marking up to this one would actually add."""
+	show_id = entry.get('show_trakt') or entry.get('show_slug')
+	if not authorized() or not show_id or is_movie(entry):
+		return 0, []
+	seasons = episodes_through(show_seasons(show_id), entry.get('season'),
+							   entry.get('episode'), watched_map(show_id))
+	return sum(len(s['episodes']) for s in seasons), seasons
+
+
+def mark_watched_through(entry, seasons=None):
+	"""Add every unwatched episode up to and including this one.
+
+	One request whatever the size of the back catalogue: Trakt's history
+	endpoint takes a show with nested seasons and episode numbers, so there
+	is no need to look up an id per episode.
+	"""
+	ids = _show_ref(entry)
+	if not authorized() or not ids or is_movie(entry):
+		return 0
+	if seasons is None:
+		_count, seasons = count_unwatched_through(entry)
+	total = sum(len(s['episodes']) for s in seasons)
+	if not total:
+		return 0
+	result = _request('POST', '/sync/history',
+					  payload={'shows': [{'ids': ids, 'seasons': seasons}]})
+	cache.delete('trakt_next_%s' % control.setting('trakt.user', 'me'))
+	return total if result else 0
 
 
 # ---------------------------------------------------------------------------

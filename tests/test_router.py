@@ -633,3 +633,144 @@ class DispatchSafetyNet(AddonTestCase):
 		with mock.patch.object(router, 'next_episodes_menu') as handler:
 			self._dispatch(action='next_episodes')
 		handler.assert_called_once()
+
+
+class BrowseSeasons(AddonTestCase):
+	def _context(self, entry=EPISODE):
+		router._add_episode_item(entry, autoplay=False)
+		return dict(self.items()[0]['item'].context)
+
+	def test_it_is_offered_on_an_episode(self):
+		self.assertIn(control.lang(33094), self._context())
+
+	def test_it_opens_the_shows_seasons(self):
+		query = command_query(self._context()[control.lang(33094)])
+		self.assertEqual(query['action'], 'show_seasons')
+
+	def test_the_show_it_passes_is_usable_by_the_seasons_menu(self):
+		query = command_query(self._context()[control.lang(33094)])
+		show = control.decode_obj(query['entry'])
+		self.assertEqual(show['show_trakt'], 111)
+		self.assertEqual(show['show_title'], 'Severance')
+		with mock.patch('resources.lib.trakt.show_seasons',
+						return_value=[{'number': 1, 'episode_count': 9}]) as seasons:
+			router.seasons_menu(show)
+		seasons.assert_called_once_with(111)
+		self.assertEqual(len(self.items()), 2)  # the episode, then the season
+
+	def test_artwork_follows_the_show_through(self):
+		art = {'poster': 'https://m/p.jpg'}
+		query = command_query(self._context(dict(EPISODE, art=art))[control.lang(33094)])
+		self.assertEqual(control.decode_obj(query['entry'])['art'], art)
+
+	def test_it_is_withheld_without_a_show_id(self):
+		entry = {k: v for k, v in EPISODE.items() if k != 'show_trakt'}
+		self.assertNotIn(control.lang(33094), self._context(entry))
+
+	def test_a_slug_alone_is_enough(self):
+		entry = dict({k: v for k, v in EPISODE.items() if k != 'show_trakt'},
+					 show_slug='severance')
+		self.assertIn(control.lang(33094), self._context(entry))
+
+
+class MarkWatchedThrough(AddonTestCase):
+	def _context(self, entry=EPISODE):
+		router._add_episode_item(entry, autoplay=False)
+		return dict(self.items()[0]['item'].context)
+
+	def _counts(self, count, seasons=None):
+		return mock.patch('resources.lib.trakt.count_unwatched_through',
+						  return_value=(count, seasons or [{'number': 1,
+															'episodes': [{'number': 1}]}]))
+
+	def test_it_is_offered_on_an_episode(self):
+		query = command_query(self._context()[control.lang(33095)])
+		self.assertEqual(query['action'], 'mark_through')
+		self.assertEqual(control.decode_obj(query['entry']), EPISODE)
+
+	def test_it_asks_before_marking_anything(self):
+		self.answer_yes(False)
+		with self._counts(12), \
+				mock.patch('resources.lib.trakt.mark_watched_through') as mark:
+			router.mark_watched_through(EPISODE)
+		mark.assert_not_called()
+
+	def test_the_prompt_says_how_many_and_up_to_where(self):
+		self.answer_yes(False)
+		with self._counts(12):
+			router.mark_watched_through(EPISODE)
+		message = self.last_dialog('yesno')[2]
+		self.assertIn('12', message)
+		self.assertIn('2x03', message)
+
+	def test_confirming_marks_and_refreshes(self):
+		self.answer_yes(True)
+		with self._counts(12), \
+				mock.patch('resources.lib.trakt.mark_watched_through',
+						   return_value=12) as mark:
+			router.mark_watched_through(EPISODE)
+		mark.assert_called_once()
+		self.assertIn('Container.Refresh', self.builtins())
+		self.assertIn('12', self.last_dialog('notification')[2])
+
+	def test_the_counted_payload_is_reused_rather_than_recomputed(self):
+		# Otherwise the seasons and progress are fetched twice for one action.
+		seasons = [{'number': 1, 'episodes': [{'number': 1}]}]
+		self.answer_yes(True)
+		with self._counts(1, seasons), \
+				mock.patch('resources.lib.trakt.mark_watched_through',
+						   return_value=1) as mark:
+			router.mark_watched_through(EPISODE)
+		self.assertEqual(mark.call_args.args[1], seasons)
+
+	def test_nothing_to_do_says_so_and_asks_nothing(self):
+		with self._counts(0), \
+				mock.patch('resources.lib.trakt.mark_watched_through') as mark:
+			router.mark_watched_through(EPISODE)
+		self.assertEqual(self.dialogs('yesno'), [])
+		mark.assert_not_called()
+		self.assertIn('2x03', self.last_dialog('ok')[2])
+
+	def test_a_failure_is_reported(self):
+		self.answer_yes(True)
+		with self._counts(12), \
+				mock.patch('resources.lib.trakt.mark_watched_through',
+						   return_value=0):
+			router.mark_watched_through(EPISODE)
+		self.assertNotIn('Container.Refresh', self.builtins())
+		self.assertTrue(self.dialogs('notification'))
+
+	def test_it_reaches_its_handler_through_dispatch(self):
+		with mock.patch.object(router, 'mark_watched_through') as handler, \
+				mock.patch.object(sys, 'argv',
+								  ['plugin://plugin.video.episodetracker/', '1',
+								   '?action=mark_through&entry=%s'
+								   % control.encode_obj(EPISODE)]):
+			router.dispatch()
+		handler.assert_called_once()
+
+
+class WatchedEpisodes(AddonTestCase):
+	def test_a_watched_episode_is_marked_for_kodi(self):
+		router._add_episode_item(dict(EPISODE, watched=True), autoplay=False)
+		tag = self.items()[0]['item'].getVideoInfoTag()
+		self.assertEqual(tag.values.get('playcount'), 1)
+
+	def test_an_unwatched_one_is_not(self):
+		router._add_episode_item(dict(EPISODE, watched=False), autoplay=False)
+		self.assertNotIn('playcount',
+						 self.items()[0]['item'].getVideoInfoTag().values)
+
+	def test_next_episodes_are_never_marked_watched(self):
+		router._add_episode_item(EPISODE, autoplay=False)
+		self.assertNotIn('playcount',
+						 self.items()[0]['item'].getVideoInfoTag().values)
+
+	def test_browsed_episodes_carry_their_state_through(self):
+		entries = [dict(EPISODE, episode=1, watched=True),
+				   dict(EPISODE, episode=2, watched=False)]
+		with mock.patch('resources.lib.trakt.season_episodes', return_value=entries):
+			router.episodes_menu(SHOW, '2')
+		counts = [i['item'].getVideoInfoTag().values.get('playcount')
+				  for i in self.items()]
+		self.assertEqual(counts, [1, None])

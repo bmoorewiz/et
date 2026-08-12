@@ -41,7 +41,7 @@ def media_info(entry):
 			'premiered': (entry.get('released') or '')[:10],
 			'duration': (entry.get('runtime') or 0) * 60 or None,
 		}
-	return {
+	info = {
 		'mediatype': 'episode',
 		'tvshowtitle': entry.get('show_title', ''),
 		'title': entry.get('ep_title', ''),
@@ -51,6 +51,11 @@ def media_info(entry):
 		'aired': (entry.get('first_aired') or '')[:10],
 		'premiered': (entry.get('first_aired') or '')[:10],
 	}
+	# Kodi draws its own watched tick from this, so browsing a season shows
+	# what has been seen without the add-on having to say so in the label.
+	if entry.get('watched'):
+		info['playcount'] = 1
+	return info
 
 
 def watched_threshold(entry):

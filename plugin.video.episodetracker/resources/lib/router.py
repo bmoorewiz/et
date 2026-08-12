@@ -58,6 +58,8 @@ def _dispatch():
 		return player.play(payload['source'], payload['entry'])
 	if action == 'mark_watched':
 		return mark_watched(_decode(params['entry']))
+	if action == 'mark_through':
+		return mark_watched_through(_decode(params['entry']))
 	if action == 'hide_show':
 		return hide_show(_decode(params['entry']))
 	if action == 'hidden_shows':
@@ -203,6 +205,26 @@ def next_episodes_menu(refresh=False):
 	control.end_directory(cache_to_disc=False, content='episodes')
 
 
+def _show_from_entry(entry):
+	"""The show an episode belongs to, shaped like a search result.
+
+	Lets an episode anywhere in the add-on open its show's seasons without
+	the browse menus needing to know where the episode came from.
+	"""
+	return {
+		'media_type': 'show',
+		'show_title': entry.get('show_title', ''),
+		'show_year': entry.get('show_year'),
+		'show_trakt': entry.get('show_trakt'),
+		'show_slug': entry.get('show_slug'),
+		'show_imdb': entry.get('show_imdb'),
+		'show_tvdb': entry.get('show_tvdb'),
+		'show_tmdb': entry.get('show_tmdb'),
+		'plot': entry.get('plot', ''),
+		'art': dict(entry.get('art') or {}),
+	}
+
+
 def _progress_suffix(entry):
 	"""How far through the show this episode is, e.g. "3/10"."""
 	if not control.get_bool('list.show_progress', True):
@@ -241,6 +263,19 @@ def _add_episode_item(entry, autoplay, suffix=''):
 		 'Container.Update(%s)' % control.build_url(
 			 {'action': 'refresh_sources', 'entry': encoded})),
 	]
+	if entry.get('show_trakt') or entry.get('show_slug'):
+		# Browsing opens the show's seasons; marking through covers
+		# everything before this episode in one go, for a show picked up
+		# part-way through.
+		context.append(
+			(control.lang(33094),
+			 'Container.Update(%s)' % control.build_url(
+				 {'action': 'show_seasons',
+				  'entry': _encode(_show_from_entry(entry))})))
+		context.append(
+			(control.lang(33095),
+			 'RunPlugin(%s)' % control.build_url(
+				 {'action': 'mark_through', 'entry': encoded})))
 	if entry.get('show_trakt'):
 		context.append(
 			(control.lang(33076),
@@ -545,6 +580,36 @@ def _preflight():
 def mark_watched(entry):
 	if trakt.add_to_history(entry):
 		control.notify(33023)
+		xbmc.executebuiltin('Container.Refresh')
+	else:
+		control.notify(33018)
+
+
+def mark_watched_through(entry):
+	"""Mark everything up to and including this episode as watched.
+
+	For a show picked up part-way through, where the alternative is
+	marking each earlier episode by hand. Already-watched episodes are
+	left alone: Trakt's history records plays rather than flags, so
+	re-adding one would count as a second viewing.
+	"""
+	pd = control.progress_bg
+	pd.create(control.addon_name, control.lang(33096))
+	try:
+		count, seasons = trakt.count_unwatched_through(entry)
+	finally:
+		pd.close()
+
+	label = player.display_label(entry)
+	if not count:
+		control.ok_dialog(control.langf(33099, label))
+		return
+	if not control.yesno_dialog(control.langf(33097, count, label),
+								heading=control.lang(33095)):
+		return
+	marked = trakt.mark_watched_through(entry, seasons)
+	if marked:
+		control.notify(control.langf(33098, marked))
 		xbmc.executebuiltin('Container.Refresh')
 	else:
 		control.notify(33018)

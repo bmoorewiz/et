@@ -627,3 +627,27 @@ msgstr ""
 msgctxt "#33093"
 msgid "Not set up yet. Open Settings to finish signing in."
 msgstr ""
+
+msgctxt "#33094"
+msgid "Browse seasons"
+msgstr ""
+
+msgctxt "#33095"
+msgid "Mark watched up to here"
+msgstr ""
+
+msgctxt "#33096"
+msgid "Checking what you have already watched..."
+msgstr ""
+
+msgctxt "#33097"
+msgid "Mark %d unwatched episode(s) as watched, up to and including %s?"
+msgstr ""
+
+msgctxt "#33098"
+msgid "Marked %d episode(s) as watched."
+msgstr ""
+
+msgctxt "#33099"
+msgid "Everything up to %s is already watched."
+msgstr ""

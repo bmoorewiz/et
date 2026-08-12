@@ -64,6 +64,11 @@ class InfoTagVideo(object):
 			raise TypeError('setDuration expects an integer')
 		self._set('duration', v)
 
+	def setPlaycount(self, v):
+		if not isinstance(v, int):
+			raise TypeError('setPlaycount expects an integer')
+		self._set('playcount', v)
+
 
 class ListItem(object):
 	def __init__(self, label='', label2='', path='', offscreen=False):
