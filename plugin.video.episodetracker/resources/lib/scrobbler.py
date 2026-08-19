@@ -32,6 +32,38 @@ _HOME = xbmcgui.Window(10000)
 # mean a request every two seconds until the episode ends.
 _MARK_ATTEMPTS = 3
 
+# Kodi does not know a stream's real duration the instant playback starts.
+# For an HTTP stream it can report a handful of seconds and only settle once
+# the demuxer has worked the file out - and 25 seconds of a "30 second"
+# episode reads as 83%, which is how a 45-minute episode was being marked
+# watched half a minute in. Progress is only believed once the duration is
+# in the same country as the runtime Trakt gives for the item.
+_RUNTIME_RATIO = 0.5
+# Fallback when Trakt has no runtime for the item: nothing this add-on plays
+# is under five minutes, so a shorter duration has not settled yet.
+_MIN_BELIEVABLE_SECONDS = 300.0
+# Consecutive samples that must agree before marking watched.
+_CONFIRMATIONS = 2
+
+
+def believable_duration(total, entry):
+	"""Could this be the real length of what is playing?
+
+	Checked against the runtime Trakt reports, which is the only
+	independent idea of how long the item should be. Where Trakt has no
+	runtime, an absolute floor stands in.
+	"""
+	try:
+		total = float(total or 0)
+	except (TypeError, ValueError):
+		return False
+	if total <= 0:
+		return False
+	runtime = player_lib.runtime_seconds(entry)
+	if runtime:
+		return total >= runtime * _RUNTIME_RATIO
+	return total >= _MIN_BELIEVABLE_SECONDS
+
 
 def announce(entry):
 	"""Called by the plugin: publish the item it is handing to Kodi."""
@@ -94,6 +126,9 @@ class ScrobblePlayer(xbmc.Player):
 		self._pending_next = None
 		self._marked = False
 		self._mark_attempts = 0
+		self._duration = 0.0
+		self._confirmations = 0
+		self._warned_duration = False
 
 	# -- Kodi callbacks ---------------------------------------------------
 
@@ -141,6 +176,9 @@ class ScrobblePlayer(xbmc.Player):
 			self._resume = resume
 			self._marked = False
 			self._mark_attempts = 0
+			self._duration = 0.0
+			self._confirmations = 0
+			self._warned_duration = False
 		control.log('tracking playback: %s' % player_lib.display_label(entry))
 
 	def _seek(self, resume, total):
@@ -176,22 +214,46 @@ class ScrobblePlayer(xbmc.Player):
 			current = self.getTime()
 		except Exception:
 			return
-		if not total:
+
+		# Everything below is a percentage of `total`, so a duration that
+		# cannot be right poisons all of it - position, the resume seek, the
+		# scrobbles, and whether this counts as watched.
+		if not believable_duration(total, entry):
+			with self._lock:
+				self._confirmations = 0
+				announced = self._warned_duration
+				self._warned_duration = True
+			if not announced:
+				control.log('ignoring a duration of %.0fs for %s (runtime says '
+							'%ds); waiting for Kodi to settle'
+							% (total or 0, player_lib.display_label(entry),
+							   player_lib.runtime_seconds(entry)))
 			return
+
 		if resume is not None:
 			with self._lock:
 				self._resume = None
 			self._seek(resume, total)
 			return  # let the next tick read the position we landed on
+
 		percent = max(0.0, min(100.0, current / total * 100.0))
+		threshold = player_lib.watched_threshold(entry)
 		with self._lock:
 			self._percent = percent
+			self._duration = total
 			first = not self._started
 			if first and percent > 0:
 				self._started = True
+			# Crossing the line has to hold for more than one reading. A
+			# single odd sample should not mark a whole episode watched.
+			if percent >= threshold:
+				self._confirmations += 1
+			else:
+				self._confirmations = 0
+			confirmed = self._confirmations >= _CONFIRMATIONS
 		if first and percent > 0:
 			trakt.scrobble(entry, 'start', percent)
-		if percent >= player_lib.watched_threshold(entry):
+		if confirmed:
 			self._mark_watched(entry, percent)
 
 	def _mark_watched(self, entry, percent):
@@ -230,14 +292,24 @@ class ScrobblePlayer(xbmc.Player):
 		with self._lock:
 			entry, percent, started = self._entry, self._percent, self._started
 			finished = self._marked
+			measured = self._duration > 0
 			self._entry, self._percent, self._started = None, 0.0, False
 			self._resume = None
 		if not entry:
 			return
-		# Playing to the very end is 100%, whatever the last sample caught.
-		if natural:
-			percent = 100.0
 		try:
+			# Nothing here is worth saying if no believable duration ever
+			# arrived. "Played to the end" is not evidence on its own - a
+			# source that turned out to be thirty seconds long reaches its
+			# end too, and reporting that as progress would have Trakt mark
+			# the episode watched by itself at 80%.
+			if not measured:
+				control.log('not marking watched: never saw a believable '
+							'duration for %s' % player_lib.display_label(entry))
+				return
+			# Playing to the very end is 100%, whatever the last sample caught.
+			if natural:
+				percent = 100.0
 			if started or percent > 0:
 				trakt.scrobble(entry, 'stop', percent)
 			threshold = player_lib.watched_threshold(entry)
@@ -254,6 +326,8 @@ class ScrobblePlayer(xbmc.Player):
 		finally:
 			with self._lock:
 				self._marked, self._mark_attempts = False, 0
+				self._duration, self._confirmations = 0.0, 0
+				self._warned_duration = False
 
 		# The prompt itself is deliberately not raised from here: this runs on
 		# a Kodi player callback, which must return promptly and must not block

@@ -167,10 +167,18 @@ class MarkWatchedDuringPlayback(ServiceBase):
 	def test_the_threshold_marks_it_without_stopping(self):
 		player = self.start(EPISODE, position=2200.0)  # 81% of 2700
 		player.sample()
+		player.sample()
 		self.assertEqual(len(self.history), 1)
+
+	def test_one_reading_is_not_enough(self):
+		# A single odd sample must not mark a whole episode watched.
+		player = self.start(EPISODE, position=2200.0)
+		player.sample()
+		self.assertEqual(self.history, [])
 
 	def test_still_playing_afterwards(self):
 		player = self.start(EPISODE, position=2200.0)
+		player.sample()
 		player.sample()
 		self.assertTrue(player.isPlayingVideo())
 		self.assertEqual(len(self.history), 1)
@@ -203,6 +211,7 @@ class MarkWatchedDuringPlayback(ServiceBase):
 		self.set(**{'scrobble.threshold.episode': '50'})
 		player = self.start(EPISODE, position=1400.0)  # 51.8%
 		player.sample()
+		player.sample()
 		self.assertEqual(len(self.history), 1)
 
 	def test_the_setting_still_turns_it_off(self):
@@ -219,6 +228,7 @@ class MarkWatchedDuringPlayback(ServiceBase):
 						wraps=lambda e: bool(cache.delete('trakt_next_') or True)):
 			player = self.start(EPISODE, position=2200.0)
 			player.sample()
+			player.sample()
 		self.assertIsNone(cache.get('trakt_next_'))
 
 	def test_a_transient_trakt_failure_is_retried_on_the_next_sample(self):
@@ -230,11 +240,9 @@ class MarkWatchedDuringPlayback(ServiceBase):
 
 		with mock.patch('resources.lib.trakt.add_to_history', side_effect=flaky):
 			player = self.start(EPISODE, position=2200.0)
-			player.sample()
-			player.position = 2300.0
-			player.sample()
-			player.position = 2400.0
-			player.sample()
+			for position in (2200.0, 2300.0, 2400.0, 2500.0):
+				player.position = position
+				player.sample()
 		self.assertEqual(len(attempts), 2, 'should retry once, then stop')
 
 	def test_a_trakt_outage_does_not_retry_forever(self):
@@ -258,6 +266,7 @@ class MarkWatchedDuringPlayback(ServiceBase):
 	def test_state_does_not_leak_into_the_next_playback(self):
 		player = self.start(EPISODE, position=2200.0)
 		player.sample()
+		player.sample()
 		player.onPlayBackEnded()
 		self.assertEqual(len(self.history), 1)
 		# A second episode in the same Kodi session must mark on its own.
@@ -265,6 +274,7 @@ class MarkWatchedDuringPlayback(ServiceBase):
 		player.position = 0.0
 		player.onAVStarted()
 		player.position = 2200.0
+		player.sample()
 		player.sample()
 		self.assertEqual(len(self.history), 2)
 
@@ -466,3 +476,108 @@ class ServiceLoop(ServiceBase):
 		scrobbler.run()  # returns rather than hanging
 		self.assertIn('service started', self.logged())
 		self.assertIn('service stopped', self.logged())
+
+
+class UnsettledDuration(ServiceBase):
+	"""Kodi's duration is not trustworthy the moment playback starts.
+
+	Reported: "the app is marking things watched after just 20-30
+	seconds". For an HTTP stream Kodi can report a handful of seconds
+	until the demuxer has worked the file out, and 25 seconds of a
+	"30 second" episode reads as 83% - over the threshold, on the first
+	sample, half a minute in.
+	"""
+
+	def test_the_reported_bug(self):
+		# 45-minute episode; Kodi says the file is 30 seconds long.
+		player = self.start(EPISODE, total=30.0, position=25.0)
+		for _tick in range(5):
+			player.sample()
+		self.assertEqual(self.history, [], 'marked watched 25 seconds in')
+
+	def test_no_progress_is_reported_from_a_duration_we_disbelieve(self):
+		# Trakt marks an item watched itself at 80%, so a bogus percentage
+		# must not reach it either.
+		player = self.start(EPISODE, total=30.0, position=25.0)
+		player.sample()
+		self.assertEqual(self.scrobbles, [])
+
+	def test_it_recovers_once_kodi_settles(self):
+		player = self.start(EPISODE, total=30.0, position=25.0)
+		player.sample()
+		self.assertEqual(self.history, [])
+		player.total, player.position = 2700.0, 30.0
+		player.sample()
+		self.assertEqual(self.scrobbles, [('start', 1.1)])
+		player.position = 2200.0
+		player.sample()
+		player.sample()
+		self.assertEqual(len(self.history), 1)
+
+	def test_a_short_broken_source_playing_to_its_end_is_not_watched(self):
+		# onPlayBackEnded fires for a 30-second file too, and "played to
+		# the end" was being taken as 100% regardless.
+		player = self.start(EPISODE, total=30.0, position=30.0)
+		player.sample()
+		player.onPlayBackEnded()
+		self.assertEqual(self.history, [])
+		self.assertEqual(self.scrobbles, [])
+
+	def test_a_real_source_playing_to_its_end_still_is(self):
+		player = self.start(EPISODE, total=2700.0, position=100.0)
+		player.sample()
+		player.position = 2700.0
+		player.onPlayBackEnded()
+		self.assertEqual(len(self.history), 1)
+
+	def test_the_resume_seek_waits_for_a_real_duration(self):
+		# Seeking to 42% of thirty seconds would land 12 seconds in.
+		scrobbler.announce_resume(42.0, 1134)
+		player = self.start(EPISODE, total=30.0)
+		player.sample()
+		self.assertEqual(player.seeks, [])
+		player.total = 2700.0
+		player.sample()
+		self.assertEqual(player.seeks, [1134])
+
+	def test_the_disbelief_is_logged_once_not_every_two_seconds(self):
+		player = self.start(EPISODE, total=30.0, position=25.0)
+		for _tick in range(5):
+			player.sample()
+		self.assertEqual(self.logged().count('ignoring a duration'), 1)
+
+	def test_state_is_cleared_between_playbacks(self):
+		player = self.start(EPISODE, total=2700.0, position=100.0)
+		player.sample()
+		player.onPlayBackStopped()
+		scrobbler.announce(NEXT)
+		player.total, player.position = 30.0, 25.0
+		player.onAVStarted()
+		player.sample()
+		self.assertEqual(self.history, [])
+
+
+class BelievableDuration(AddonTestCase):
+	def test_it_is_judged_against_the_trakt_runtime(self):
+		self.assertTrue(scrobbler.believable_duration(2700.0, EPISODE))
+		self.assertTrue(scrobbler.believable_duration(2400.0, EPISODE))
+		self.assertFalse(scrobbler.believable_duration(30.0, EPISODE))
+		self.assertFalse(scrobbler.believable_duration(1000.0, EPISODE))
+
+	def test_a_longer_file_is_fine(self):
+		# A pack file, or one with padding, is not evidence of a problem.
+		self.assertTrue(scrobbler.believable_duration(9000.0, EPISODE))
+
+	def test_movies_use_their_own_runtime(self):
+		self.assertTrue(scrobbler.believable_duration(9000.0, MOVIE))
+		self.assertFalse(scrobbler.believable_duration(600.0, MOVIE))
+
+	def test_without_a_runtime_an_absolute_floor_applies(self):
+		bare = {'media_type': 'episode', 'show_title': 'X'}
+		self.assertFalse(scrobbler.believable_duration(30.0, bare))
+		self.assertFalse(scrobbler.believable_duration(299.0, bare))
+		self.assertTrue(scrobbler.believable_duration(2700.0, bare))
+
+	def test_nothing_is_believable(self):
+		for value in (0, 0.0, None, '', 'lots', -100):
+			self.assertFalse(scrobbler.believable_duration(value, EPISODE), value)

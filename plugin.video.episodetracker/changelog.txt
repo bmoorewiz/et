@@ -1,3 +1,18 @@
+v1.9.1
+- Fixed episodes being marked watched half a minute in. Kodi does not know
+  a stream's real length the instant playback starts - for a debrid stream
+  it can report a few seconds until it has worked the file out - and 25
+  seconds of a "30 second" episode looks like 83% watched. Progress is now
+  ignored until the reported length is credible next to the runtime Trakt
+  gives for the item.
+- Nothing is reported to Trakt from a length that is not credible either.
+  Trakt marks an item watched itself at 80%, so a bad percentage reaching
+  it was a second route to the same problem.
+- Crossing the watched threshold now has to hold for two checks in a row,
+  so a single odd reading cannot mark a whole episode watched.
+- A broken source that is only seconds long no longer counts as watched
+  when it reaches its end.
+
 v1.9.0
 - "Browse seasons" on an episode's context menu, opening that show's
   seasons and every episode in them - so you can reach any episode of a
