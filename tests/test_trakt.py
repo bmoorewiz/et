@@ -37,6 +37,9 @@ class FakeTrakt(object):
 											   (None, 404))
 		return FakeResponse(payload, status_code)
 
+	def paths(self):
+		return [call['path'] for call in self.calls]
+
 	def sent(self, method, path):
 		for call in self.calls:
 			if call['method'] == method.upper() and call['path'] == path:
@@ -133,11 +136,14 @@ class NextEpisodes(TraktBase):
 		self.assertEqual(trakt.next_episodes(refresh=True), [])
 
 	def test_results_are_cached(self):
+		# The next-up list itself comes from cache; only the part-watched
+		# lookup is repeated, because where you got to changes as you watch.
 		self._setup()
 		trakt.next_episodes(refresh=True)
-		before = len(self.api.calls)
+		before = self.api.paths()
 		trakt.next_episodes()
-		self.assertEqual(len(self.api.calls), before)
+		added = self.api.paths()[len(before):]
+		self.assertEqual(added, ['/sync/playback/episodes'])
 
 	def test_marking_watched_invalidates_the_cache(self):
 		self._setup()
@@ -797,3 +803,115 @@ class WatchedState(TraktBase):
 	def test_a_failed_progress_call_is_empty_not_broken(self):
 		self.api.route('GET', '/shows/111/progress/watched', None, 500)
 		self.assertEqual(trakt.watched_map(111), {})
+
+
+class PartWatchedInNextEpisodes(TraktBase):
+	"""Half-finished episodes surface on the main list, at the top.
+
+	Asked for: "I watch half a show one night and finish it another. It
+	would be nice to see on the main page how long was left and resume
+	right there at the top of the list."
+	"""
+
+	def _setup(self, playback=()):
+		self.api.route('GET', '/sync/watched/shows', [
+			{'last_watched_at': '2020-01-01T00:00:00.000Z',
+			'show': {'title': 'Alpha', 'ids': {'trakt': 1}}},
+			{'last_watched_at': '2026-01-01T00:00:00.000Z',
+			'show': {'title': 'Bravo', 'ids': {'trakt': 2}}}])
+		for trakt_id, ep_id in ((1, 11), (2, 22)):
+			self.api.route('GET', '/shows/%d/progress/watched' % trakt_id, {
+				'aired': 10, 'completed': 3,
+				'next_episode': {'season': 1, 'number': 1, 'title': 'One',
+								'ids': {'trakt': ep_id}, 'runtime': 45,
+								'first_aired': '2020-01-01T00:00:00.000Z'}})
+		self.api.route('GET', '/sync/playback/episodes', list(playback))
+
+	def _part_watched(self, ep_id, progress):
+		return {'progress': progress, 'episode': {'ids': {'trakt': ep_id}}}
+
+	def test_the_position_reaches_the_entry(self):
+		self._setup([self._part_watched(11, 42.5)])
+		by_show = {e['show_title']: e for e in trakt.next_episodes(refresh=True)}
+		self.assertEqual(by_show['Alpha']['progress'], 42.5)
+		self.assertNotIn('progress', by_show['Bravo'])
+
+	def test_a_part_watched_episode_goes_to_the_top(self):
+		# Alpha would otherwise be last: it was watched six years earlier.
+		self._setup([self._part_watched(11, 42.5)])
+		entries = trakt.next_episodes(refresh=True)
+		self.assertEqual([e['show_title'] for e in entries], ['Alpha', 'Bravo'])
+
+	def test_without_it_the_chosen_order_stands(self):
+		self._setup()
+		entries = trakt.next_episodes(refresh=True)
+		self.assertEqual([e['show_title'] for e in entries], ['Bravo', 'Alpha'])
+
+	def test_the_setting_turns_the_pinning_off(self):
+		self.set(**{'list.inprogress_first': False})
+		self._setup([self._part_watched(11, 42.5)])
+		entries = trakt.next_episodes(refresh=True)
+		self.assertEqual([e['show_title'] for e in entries], ['Bravo', 'Alpha'])
+
+	def test_the_chosen_order_still_decides_within_each_group(self):
+		self._setup([self._part_watched(11, 42.5),
+					self._part_watched(22, 10.0)])
+		entries = trakt.next_episodes(refresh=True)
+		self.assertEqual([e['show_title'] for e in entries], ['Bravo', 'Alpha'])
+
+	def test_the_position_is_looked_up_fresh_not_cached_with_the_list(self):
+		# Where you got to changes every time you stop watching; the
+		# next-up list does not.
+		self._setup()
+		trakt.next_episodes(refresh=True)
+		self.api.route('GET', '/sync/playback/episodes',
+					[self._part_watched(11, 42.5)])
+		entries = trakt.next_episodes()
+		self.assertEqual(entries[0]['progress'], 42.5)
+
+	def test_finishing_it_removes_the_position(self):
+		self._setup([self._part_watched(11, 42.5)])
+		trakt.next_episodes(refresh=True)
+		self.api.route('GET', '/sync/playback/episodes', [])
+		self.assertNotIn('progress', trakt.next_episodes()[0])
+
+
+class PlaybackIndex(TraktBase):
+	def test_every_id_is_a_way_in(self):
+		self.api.route('GET', '/sync/playback/episodes', [
+			{'progress': 42.5,
+			'episode': {'ids': {'trakt': 999, 'imdb': 'tt1', 'tvdb': 5}}}])
+		index = trakt.playback_index()
+		self.assertEqual(index[('trakt', 999)], 42.5)
+		self.assertEqual(index[('imdb', 'tt1')], 42.5)
+		self.assertEqual(index[('tvdb', 5)], 42.5)
+
+	def test_an_entry_matches_on_whichever_id_it_has(self):
+		self.api.route('GET', '/sync/playback/episodes', [
+			{'progress': 42.5, 'episode': {'ids': {'imdb': 'tt1'}}}])
+		entry = {'media_type': 'episode', 'ep_imdb': 'tt1'}
+		trakt.apply_playback([entry])
+		self.assertEqual(entry['progress'], 42.5)
+
+	def test_zero_progress_is_not_part_watched(self):
+		self.api.route('GET', '/sync/playback/episodes', [
+			{'progress': 0, 'episode': {'ids': {'trakt': 999}}}])
+		self.assertEqual(trakt.playback_index(), {})
+
+	def test_junk_progress_is_skipped(self):
+		self.api.route('GET', '/sync/playback/episodes', [
+			{'progress': 'lots', 'episode': {'ids': {'trakt': 999}}}])
+		self.assertEqual(trakt.playback_index(), {})
+
+	def test_a_failed_call_is_empty_not_broken(self):
+		self.api.route('GET', '/sync/playback/episodes', None, 500)
+		self.assertEqual(trakt.playback_index(), {})
+
+	def test_unauthorized_never_calls_out(self):
+		self.set(**{'trakt.token': ''})
+		self.assertEqual(trakt.playback_index(), {})
+		self.assertEqual(self.api.calls, [])
+
+	def test_applying_nothing_leaves_entries_alone(self):
+		entries = [{'media_type': 'episode', 'ep_trakt': 999}]
+		self.assertEqual(trakt.apply_playback(entries, {}), entries)

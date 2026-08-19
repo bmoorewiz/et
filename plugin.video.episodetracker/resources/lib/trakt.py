@@ -446,8 +446,54 @@ def has_aired(entry, now=None):
 	return True
 
 
+def playback_index(kind='episodes', limit=100):
+	"""Every id of every part-watched item, mapped to how far in it got.
+
+	Keyed on each id Trakt knows separately, so an entry can be matched by
+	whichever id it happens to carry without scanning the whole list.
+	"""
+	if not authorized():
+		return {}
+	items = _request('GET', '/sync/playback/%s' % kind, params={'limit': limit})
+	if not isinstance(items, list):
+		return {}
+	key = 'movie' if kind == 'movies' else 'episode'
+	index = {}
+	for item in items:
+		try:
+			progress = float(item.get('progress') or 0)
+		except (TypeError, ValueError):
+			continue
+		if progress <= 0:
+			continue
+		for id_key, value in ((item.get(key) or {}).get('ids') or {}).items():
+			if value:
+				index[(id_key, value)] = progress
+	return index
+
+
+def apply_playback(entries, index=None):
+	"""Tag entries that were started and not finished with their position.
+
+	Deliberately applied to the list on the way out rather than baked into
+	the cached entries: where you got to changes every time you stop
+	watching, and the cached next-up list does not.
+	"""
+	if index is None:
+		index = playback_index('episodes')
+	if not index:
+		return entries
+	for entry in entries:
+		for id_key, value in (_media_ref(entry)['ids']).items():
+			progress = index.get((id_key, value))
+			if progress:
+				entry['progress'] = progress
+				break
+	return entries
+
+
 def _post_filter(entries):
-	entries = list(entries)
+	entries = apply_playback([dict(e) for e in entries])
 	if control.get_bool('list.aired_only', True):
 		now = time.time()
 		kept = [e for e in entries if has_aired(e, now)]
@@ -463,6 +509,12 @@ def _post_filter(entries):
 		entries.sort(key=lambda e: e.get('first_aired') or '', reverse=True)
 	else:  # alphabetical
 		entries.sort(key=lambda e: (e.get('show_title') or '').lower())
+
+	# Something half-watched is the thing most likely to be wanted next, so
+	# it goes to the top whatever the chosen order. A stable sort, so the
+	# chosen order still decides everything within each group.
+	if control.get_bool('list.inprogress_first', True):
+		entries.sort(key=lambda e: not e.get('progress'))
 	return entries
 
 

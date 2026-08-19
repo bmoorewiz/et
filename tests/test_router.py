@@ -774,3 +774,72 @@ class WatchedEpisodes(AddonTestCase):
 		counts = [i['item'].getVideoInfoTag().values.get('playcount')
 				  for i in self.items()]
 		self.assertEqual(counts, [1, None])
+
+
+class TimeLeftOnTheList(AddonTestCase):
+	"""What is left of a half-watched episode, on the main list."""
+
+	def label(self, **fields):
+		router._add_episode_item(dict(EPISODE, **fields), autoplay=False)
+		return self.items()[-1]['item'].label
+
+	def test_it_says_how_long_is_left(self):
+		# 45-minute episode, 42% in.
+		self.assertIn('(26m left)', self.label(progress=42.0))
+
+	def test_hours_are_broken_out(self):
+		self.assertIn('(1h 33m left)', self.label(runtime=155, progress=40.0))
+
+	def test_almost_finished_is_said_in_words(self):
+		self.assertIn(control.lang(33101), self.label(progress=99.9))
+
+	def test_it_beats_the_series_counter(self):
+		# Deciding whether to watch this now is about the time left.
+		label = self.label(progress=42.0, aired_count=10, completed_count=3)
+		self.assertIn('26m left', label)
+		self.assertNotIn('(3/10)', label)
+
+	def test_an_untouched_episode_keeps_the_series_counter(self):
+		label = self.label(aired_count=10, completed_count=3)
+		self.assertIn('(3/10)', label)
+
+	def test_no_runtime_means_no_claim_about_time(self):
+		self.assertNotIn('left', self.label(runtime=None, progress=42.0))
+
+	def test_junk_progress_does_not_break_the_label(self):
+		self.assertTrue(self.label(progress='lots'))
+
+
+class ResumePointOnTheList(AddonTestCase):
+	def _item(self, autoplay=False, **fields):
+		router._add_episode_item(dict(EPISODE, **fields), autoplay=autoplay)
+		return self.items()[-1]['item']
+
+	def test_a_part_watched_episode_carries_a_resume_point(self):
+		item = self._item(progress=40.0)
+		# 40% of 45 minutes.
+		self.assertEqual(item.getProperty('ResumeTime'), '1080')
+		self.assertEqual(item.getProperty('TotalTime'), '2700')
+		self.assertEqual(item.getVideoInfoTag().values['resumepoint'],
+						 (1080.0, 2700.0))
+
+	def test_an_untouched_episode_carries_none(self):
+		item = self._item()
+		self.assertEqual(item.getProperty('ResumeTime'), '')
+		self.assertNotIn('resumepoint', item.getVideoInfoTag().values)
+
+	def test_a_playable_item_carries_none_either(self):
+		# Kodi raises its own resume chooser for those, which would ask the
+		# same question the add-on is about to.
+		item = self._item(autoplay=True, progress=40.0)
+		self.assertEqual(item.getProperty('ResumeTime'), '')
+
+	def test_a_finished_episode_carries_none(self):
+		self.assertEqual(self._item(progress=100.0).getProperty('ResumeTime'), '')
+
+	def test_no_runtime_means_no_resume_point(self):
+		item = self._item(runtime=None, progress=40.0)
+		self.assertEqual(item.getProperty('ResumeTime'), '')
+
+	def test_junk_progress_does_not_break_the_item(self):
+		self.assertEqual(self._item(progress='lots').getProperty('ResumeTime'), '')

@@ -290,6 +290,10 @@ msgctxt "#32114"
 msgid "Show how far through a series you are"
 msgstr ""
 
+msgctxt "#32115"
+msgid "Put part-watched episodes first"
+msgstr ""
+
 msgctxt "#32080"
 msgid "Tools"
 msgstr ""
@@ -650,4 +654,12 @@ msgstr ""
 
 msgctxt "#33099"
 msgid "Everything up to %s is already watched."
+msgstr ""
+
+msgctxt "#33100"
+msgid "%s left"
+msgstr ""
+
+msgctxt "#33101"
+msgid "almost finished"
 msgstr ""

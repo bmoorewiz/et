@@ -1,3 +1,15 @@
+v1.10.0
+- Next Episodes now shows what is left of anything you started and did not
+  finish, e.g. "(26m left)", so you can tell at a glance whether there is
+  time for it tonight.
+- Those episodes are pinned to the top of the list, whatever sort order you
+  have chosen. Turn it off with "Put part-watched episodes first".
+- Skins that draw a progress bar on list items now get one, from the same
+  position. Selecting the episode resumes it as before.
+- The position is looked up fresh each time the list is opened rather than
+  cached with it, because where you got to changes every time you stop
+  watching and the next-up list does not.
+
 v1.9.1
 - Fixed episodes being marked watched half a minute in. Kodi does not know
   a stream's real length the instant playback starts - for a debrid stream

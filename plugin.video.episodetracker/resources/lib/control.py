@@ -183,8 +183,14 @@ def aborted():
 
 
 def add_directory_item(label, params, is_folder=True, art=None, info=None,
-					   context=None, is_playable=False):
-	"""Add a single ListItem to the current plugin directory."""
+					   context=None, is_playable=False, resume=None):
+	"""Add a single ListItem to the current plugin directory.
+
+	`resume` is ``(seconds, total)`` for something part-watched. Skins draw
+	their progress bar from the info tag's resume point; the two properties
+	are the older route to the same thing, and cost nothing to set for
+	skins that still read them.
+	"""
 	item = xbmcgui.ListItem(label=label)
 	art = art or {}
 	if 'icon' not in art:
@@ -201,6 +207,14 @@ def add_directory_item(label, params, is_folder=True, art=None, info=None,
 			_apply_info_tag(tag, info)
 		except Exception:
 			item.setInfo('video', info)
+	if resume:
+		seconds, total = resume
+		item.setProperty('ResumeTime', str(seconds))
+		item.setProperty('TotalTime', str(total))
+		try:
+			item.getVideoInfoTag().setResumePoint(float(seconds), float(total))
+		except Exception:
+			pass  # Kodi 19 has no setResumePoint; the properties still apply
 	if is_playable:
 		item.setProperty('IsPlayable', 'true')
 	if context:

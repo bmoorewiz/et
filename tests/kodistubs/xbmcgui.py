@@ -69,6 +69,12 @@ class InfoTagVideo(object):
 			raise TypeError('setPlaycount expects an integer')
 		self._set('playcount', v)
 
+	def setResumePoint(self, time, totaltime=0.0):
+		# Kodi takes floats here and rejects anything else.
+		if not isinstance(time, float) or not isinstance(totaltime, float):
+			raise TypeError('setResumePoint expects floats')
+		self._set('resumepoint', (time, totaltime))
+
 
 class ListItem(object):
 	def __init__(self, label='', label2='', path='', offscreen=False):

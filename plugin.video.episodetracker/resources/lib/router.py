@@ -250,9 +250,52 @@ def _resume_suffix(entry):
 	return '  [COLOR grey](%d%%)[/COLOR]' % percent
 
 
+def _format_minutes(minutes):
+	minutes = int(round(minutes))
+	if minutes >= 60:
+		return '%dh %02dm' % divmod(minutes, 60)
+	return '%dm' % minutes
+
+
+def _remaining_suffix(entry):
+	"""How much of a part-watched episode is left, e.g. "24m left".
+
+	The point of picking a half-finished episode back up is knowing whether
+	there is time for it, so this says what is left rather than how far in
+	it got.
+	"""
+	try:
+		percent = float(entry.get('progress') or 0)
+	except (TypeError, ValueError):
+		return ''
+	runtime = player.runtime_seconds(entry)
+	if percent <= 0 or not runtime:
+		return ''
+	remaining = runtime * (100.0 - percent) / 100.0 / 60.0
+	if remaining < 1:
+		return '  [COLOR gold](%s)[/COLOR]' % control.lang(33101)
+	return '  [COLOR gold](%s)[/COLOR]' % control.langf(
+		33100, _format_minutes(remaining))
+
+
+def _resume_point(entry):
+	"""``(seconds, total)`` for a part-watched episode, or None."""
+	try:
+		percent = float(entry.get('progress') or 0)
+	except (TypeError, ValueError):
+		return None
+	runtime = player.runtime_seconds(entry)
+	if percent <= 0 or percent >= 100 or not runtime:
+		return None
+	return int(runtime * percent / 100.0), runtime
+
+
 def _add_episode_item(entry, autoplay, suffix=''):
 	# Reuse the player's label/info builders so the two never drift apart.
-	label = player.display_label(entry) + (suffix or _progress_suffix(entry))
+	# What is left of a half-watched episode beats how far through the
+	# series it is - that is the thing being decided when looking at it.
+	label = player.display_label(entry) + (
+		suffix or _remaining_suffix(entry) or _progress_suffix(entry))
 	encoded = _encode(entry)
 	info = player.media_info(entry)
 	context = [
@@ -283,6 +326,11 @@ def _add_episode_item(entry, autoplay, suffix=''):
 				 {'action': 'hide_show', 'entry': encoded})))
 	context.append((control.lang(33002), 'Container.Refresh'))
 	action = 'autoplay' if autoplay else 'sources'
+	# Skins draw their own progress bar from a resume point. Only set it on
+	# folder items: on a playable one Kodi raises its own "Resume / Play
+	# from beginning" chooser, which would ask the same question the
+	# add-on's own resume prompt is about to.
+	resume = None if autoplay else _resume_point(entry)
 	control.add_directory_item(
 		label,
 		{'action': action, 'entry': encoded},
@@ -290,7 +338,8 @@ def _add_episode_item(entry, autoplay, suffix=''):
 		is_playable=autoplay,
 		art=dict(entry.get('art') or {}),
 		info=info,
-		context=context)
+		context=context,
+		resume=resume)
 
 
 # ---------------------------------------------------------------------------

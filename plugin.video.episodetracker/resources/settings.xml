@@ -68,6 +68,7 @@
 		<setting id="list.aired_only" type="bool" label="32061" default="true" /><!-- Only show aired episodes -->
 		<setting id="list.sort" type="enum" label="32062" values="Last watched|Recently aired|Alphabetical" default="0" />
 		<setting id="list.show_progress" type="bool" label="32114" default="true" />
+		<setting id="list.inprogress_first" type="bool" label="32115" default="true" />
 		<setting id="cache.hours" type="slider" label="32063" default="6" range="1,1,48" option="int" /><!-- Source cache (hours) -->
 	</category>
 
