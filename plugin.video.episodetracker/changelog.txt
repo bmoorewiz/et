@@ -1,3 +1,12 @@
+v1.10.2
+- Fixed TorBox rarely being used even when it had the torrent. Its cache
+  check was being switched off for the whole session by a single failed
+  account check, so no source was ever flagged as cached on TorBox and
+  playback had no reason to try it first. The check now runs on its own -
+  a bad key is reported by the check itself, without a separate lookup.
+- The log now records what each service said about the cache, so "why is
+  it never using TorBox" is answerable from a diagnostics upload.
+
 v1.10.1
 - A debrid service that stops answering is now set aside for a few minutes
   instead of being retried for every source. With the box offline, each of

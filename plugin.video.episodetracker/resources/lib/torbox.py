@@ -153,13 +153,24 @@ def account_status():
 # ---------------------------------------------------------------------------
 
 def cached_hashes(hashes, batch=100):
-	"""Return ``(cached_set, usable)`` for the given info hashes."""
+	"""Return ``(cached_set, usable)`` for the given info hashes.
+
+	Deliberately does not call account_status(). It used to, and a single
+	transient failure there switched the cache check off for the whole
+	session - every source then listed unflagged, so nothing was ever known
+	to be cached on TorBox and playback never had a reason to prefer it.
+	A genuinely bad key needs no separate check: checkcached says so
+	itself. Only an answer already on record as bad is honoured, and that
+	costs no request.
+	"""
 	cached, usable = set(), False
 	hashes = [h.lower() for h in hashes if h]
 	if not hashes or not enabled():
 		return cached, usable
-	ok, _message = account_status()
-	if not ok:
+	known = cache.get('torbox_account_status')
+	if known is not None and not known.get('ok'):
+		control.log('skipping the TorBox cache check: %s'
+					% known.get('message', 'account unusable'))
 		return cached, usable
 
 	minutes = max(1, control.get_int('rd.cache_check_minutes', 20))

@@ -76,6 +76,11 @@ def cached_hashes(hashes):
 		except Exception:
 			control.error('%s cache check failed' % name)
 			continue
+		# Per provider, so a log answers "why is it never using X" directly
+		# rather than only saying nobody had anything to say.
+		control.log('%s cache check: %s'
+					% (name, '%d of %d cached' % (len(cached), len(hashes))
+					   if provider_usable else 'no usable answer'))
 		usable |= bool(provider_usable)
 		for info_hash in cached:
 			mapping.setdefault(info_hash, []).append(name)

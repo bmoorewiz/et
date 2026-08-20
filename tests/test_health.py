@@ -175,3 +175,72 @@ class OrderPrefersWhoeverAnswers(AddonTestCase):
 		health.record_failure('TorBox')
 		health.record_failure('TorBox')
 		self.assertEqual(debrid.order_for(['TorBox']), ['Real-Debrid', 'TorBox'])
+
+
+class TheCacheCheckStaysOn(AddonTestCase):
+	"""A wobble must not switch TorBox's cache check off for the session.
+
+	Reported: "it seems to only resolve with real-debrid but it should use
+	torbox also". The log showed TorBox answering "not cached" - which only
+	a working key can do - yet also "no debrid provider returned usable
+	cache information", so no source was ever flagged [TB+] and playback
+	never had a reason to ask TorBox first.
+	"""
+
+	def setUp(self):
+		super(TheCacheCheckStaysOn, self).setUp()
+		self.set(**{'torbox.api_key': 'key', 'torbox.enabled': True})
+
+	def _answers(self, payload):
+		response = mock.Mock(content=b'{}')
+		response.json.return_value = payload
+		return mock.patch.object(torbox._session, 'request', return_value=response)
+
+	def test_it_does_not_spend_a_request_on_the_account_first(self):
+		with self._answers({'success': True, 'data': [{'hash': 'aaa'}]}) as request:
+			cached, usable = torbox.cached_hashes(['AAA', 'BBB'])
+		self.assertTrue(usable)
+		self.assertEqual(cached, {'aaa'})
+		paths = [call.args[1] for call in request.call_args_list]
+		self.assertNotIn(torbox.BASE + torbox.USER, paths)
+
+	def test_a_bad_key_is_still_reported_as_unusable(self):
+		with self._answers({'success': False, 'detail': 'BAD_TOKEN'}):
+			cached, usable = torbox.cached_hashes(['AAA'])
+		self.assertFalse(usable)
+		self.assertEqual(cached, set())
+
+	def test_a_known_bad_account_is_honoured_without_asking(self):
+		from resources.lib import cache
+		cache.set('torbox_account_status', {'ok': False, 'message': 'free plan'})
+		with mock.patch.object(torbox._session, 'request') as request:
+			cached, usable = torbox.cached_hashes(['AAA'])
+		request.assert_not_called()
+		self.assertFalse(usable)
+
+	def test_a_previous_transient_failure_does_not_disable_it(self):
+		# account_status() does not cache failures, so nothing is on record
+		# and the check must simply run.
+		with mock.patch.object(torbox._session, 'request',
+							   side_effect=OSError('no address')):
+			torbox.account_status()
+		health.clear('TorBox')
+		with self._answers({'success': True, 'data': [{'hash': 'aaa'}]}):
+			cached, usable = torbox.cached_hashes(['AAA'])
+		self.assertTrue(usable)
+		self.assertEqual(cached, {'aaa'})
+
+	def test_a_cached_source_sends_playback_to_torbox_first(self):
+		# This is the whole point of the flags.
+		self.set(**{'rd.token': 'token', 'debrid.priority': '0'})
+		self.assertEqual(debrid.order_for(['TorBox'])[0], 'TorBox')
+
+	def test_each_provider_reports_its_own_result(self):
+		self.set(**{'rd.token': 'token'})
+		with mock.patch.object(torbox, 'cached_hashes',
+							   return_value=({'aaa'}, True)), \
+				mock.patch.object(realdebrid, 'cached_hashes',
+								  return_value=(set(), False)):
+			debrid.cached_hashes(['aaa', 'bbb'])
+		self.assertIn('TorBox cache check: 1 of 2 cached', self.logged())
+		self.assertIn('Real-Debrid cache check: no usable answer', self.logged())
