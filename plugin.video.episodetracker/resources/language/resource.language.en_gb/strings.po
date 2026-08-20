@@ -663,3 +663,7 @@ msgstr ""
 msgctxt "#33101"
 msgid "almost finished"
 msgstr ""
+
+msgctxt "#33102"
+msgid "%s expires in %d day(s)"
+msgstr ""

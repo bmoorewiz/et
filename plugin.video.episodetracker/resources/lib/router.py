@@ -2,6 +2,7 @@
 """Request router: maps plugin:// actions to behaviour and builds menus."""
 
 import sys
+import time
 
 import xbmc
 
@@ -617,13 +618,37 @@ def _preflight():
 	if not trakt.authorized():
 		control.notify(33006)
 		return False
-	# An expired or non-premium Real-Debrid account fails every single
-	# resolve, so say so up front rather than after four failed attempts.
+	# An expired or non-premium account fails every single resolve, so say
+	# so up front rather than after four failed attempts. Only fatal when
+	# *no* provider can serve: with two set up, one lapsing is not a
+	# problem worth stopping for - the other takes over on its own.
 	ok, message = debrid.account_status()
 	if not ok:
 		control.ok_dialog(message, heading=control.lang(33005))
 		return False
+	_warn_if_expiring()
 	return True
+
+
+def _warn_if_expiring():
+	"""Mention a subscription about to run out, at most once a day.
+
+	Worth saying before it lapses rather than after: with a second service
+	set up nothing will visibly break when it does, so the only signal
+	would be one provider quietly doing all the work.
+	"""
+	try:
+		soon = debrid.expiring_soon()
+	except Exception:
+		return
+	if not soon:
+		return
+	today = time.strftime('%Y-%m-%d')
+	if control.setting('debrid.expiry_warned') == today:
+		return
+	control.set_setting('debrid.expiry_warned', today)
+	for name, days in soon:
+		control.notify(control.langf(33102, name, days))
 
 
 def mark_watched(entry):

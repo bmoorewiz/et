@@ -137,15 +137,49 @@ def account_status():
 					   'Re-enter it under Settings > Accounts.')
 	plan = info.get('plan')
 	expires = info.get('premium_expires_at') or ''
+	days = _days_until(expires)
 	# plan 0 is the free tier, which cannot serve cached torrents.
 	if plan in (0, '0', None):
 		result = (False, 'TorBox account "%s" is on the free plan.'
 				  % info.get('email', '?'))
+		days = 0
 	else:
 		result = (True, 'plan %s, expires %s' % (plan, expires[:10] or 'unknown'))
-	cache.set('torbox_account_status', {'ok': result[0], 'message': result[1]},
-			  hours=1)
+	cache.set('torbox_account_status',
+			  {'ok': result[0], 'message': result[1], 'days': days}, hours=1)
 	return result
+
+
+def _days_until(timestamp):
+	"""Whole days between now and an ISO timestamp, or None."""
+	if not timestamp:
+		return None
+	try:
+		import datetime
+		text = str(timestamp).replace('Z', '+0000')
+		for fmt in ('%Y-%m-%dT%H:%M:%S.%f%z', '%Y-%m-%dT%H:%M:%S%z',
+					'%Y-%m-%d'):
+			try:
+				when = datetime.datetime.strptime(text, fmt)
+			except ValueError:
+				continue
+			if when.tzinfo is None:
+				when = when.replace(tzinfo=datetime.timezone.utc)
+			return max(0, int((when.timestamp() - time.time()) // 86400))
+	except Exception:
+		return None
+	return None
+
+
+def days_left():
+	"""Days of subscription remaining, or None if not known."""
+	cached = cache.get('torbox_account_status')
+	if not cached or cached.get('days') is None:
+		return None
+	try:
+		return int(cached['days'])
+	except (TypeError, ValueError):
+		return None
 
 
 # ---------------------------------------------------------------------------

@@ -244,3 +244,139 @@ class TheCacheCheckStaysOn(AddonTestCase):
 			debrid.cached_hashes(['aaa', 'bbb'])
 		self.assertIn('TorBox cache check: 1 of 2 cached', self.logged())
 		self.assertIn('Real-Debrid cache check: no usable answer', self.logged())
+
+
+class ExpiredProviderStepsAside(AddonTestCase):
+	"""A lapsed subscription hands over to the other service.
+
+	Asked for: "my real-debrid account expires in 2 days, it needs to be
+	able to check that somehow and switch to torbox automatically since it
+	is already setup."
+	"""
+
+	def setUp(self):
+		super(ExpiredProviderStepsAside, self).setUp()
+		self.set(**{'rd.token': 'token', 'torbox.api_key': 'key',
+					'torbox.enabled': True})
+
+	def _accounts(self, rd, tb):
+		return (mock.patch.object(realdebrid, 'account_status', return_value=rd),
+				mock.patch.object(torbox, 'account_status', return_value=tb))
+
+	def _resolve(self, rd, tb):
+		rd_patch, tb_patch = self._accounts(rd, tb)
+		asked = []
+		with rd_patch, tb_patch, \
+				mock.patch.object(realdebrid, 'resolve_magnet',
+								  side_effect=lambda *a, **k:
+								  asked.append('Real-Debrid') or (None, 'no')), \
+				mock.patch.object(torbox, 'resolve_magnet',
+								  side_effect=lambda *a, **k:
+								  asked.append('TorBox') or ('https://tb/f', None)):
+			result = debrid.resolve_magnet('magnet:?x', 'abc')
+		return asked, result
+
+	OK_RD = (True, 'premium, 30 days left')
+	DEAD_RD = (False, 'Real-Debrid account "x" has no active premium time.')
+	OK_TB = (True, 'plan 2, expires 2030-01-01')
+
+	def test_an_expired_account_is_not_even_tried(self):
+		asked, (url, _error, provider) = self._resolve(self.DEAD_RD, self.OK_TB)
+		self.assertEqual(asked, ['TorBox'])
+		self.assertEqual(provider, 'TorBox')
+		self.assertEqual(url, 'https://tb/f')
+
+	def test_a_working_account_is_still_used(self):
+		asked, _result = self._resolve(self.OK_RD, self.OK_TB)
+		self.assertIn('Real-Debrid', asked)
+
+	def test_the_handover_is_logged(self):
+		self._resolve(self.DEAD_RD, self.OK_TB)
+		self.assertIn('skipping Real-Debrid', self.logged())
+
+	def test_the_only_provider_is_still_tried_even_when_unusable(self):
+		# Its real error is far more use than silence.
+		self.set(**{'torbox.enabled': False})
+		with mock.patch.object(realdebrid, 'account_status',
+							   return_value=self.DEAD_RD), \
+				mock.patch.object(realdebrid, 'resolve_magnet',
+								  return_value=(None, 'no premium')) as resolve:
+			url, error, _provider = debrid.resolve_magnet('magnet:?x', 'abc')
+		resolve.assert_called_once()
+		self.assertIn('no premium', error)
+
+	def test_an_unknown_account_state_is_not_treated_as_expired(self):
+		with mock.patch.object(realdebrid, 'account_status',
+							   side_effect=RuntimeError('offline')):
+			self.assertTrue(debrid.serviceable('Real-Debrid'))
+
+	def test_a_benched_provider_is_also_unserviceable(self):
+		health.record_failure('TorBox')
+		health.record_failure('TorBox')
+		# And answered from the bench alone: asking the account check would
+		# reach the same conclusion, but only after doing the work.
+		with mock.patch.object(torbox, 'account_status') as status:
+			self.assertFalse(debrid.serviceable('TorBox'))
+		status.assert_not_called()
+
+
+class ExpiryWarning(AddonTestCase):
+	def setUp(self):
+		super(ExpiryWarning, self).setUp()
+		self.set(**{'rd.token': 'token'})
+
+	def _days(self, days):
+		from resources.lib import cache
+		cache.set('rd_account_status',
+				  {'ok': True, 'message': 'premium', 'days': days})
+
+	def test_it_reads_the_days_without_asking_again(self):
+		self._days(2)
+		with mock.patch.object(realdebrid._session, 'get') as get:
+			self.assertEqual(realdebrid.days_left(), 2)
+		get.assert_not_called()
+
+	def test_a_subscription_about_to_lapse_is_reported(self):
+		self._days(2)
+		self.assertEqual(debrid.expiring_soon(), [('Real-Debrid', 2)])
+
+	def test_a_healthy_subscription_is_not(self):
+		self._days(30)
+		self.assertEqual(debrid.expiring_soon(), [])
+
+	def test_an_already_expired_one_is_not_warned_about(self):
+		# It is not a warning any more; it is handled by stepping aside.
+		self._days(0)
+		self.assertEqual(debrid.expiring_soon(), [])
+
+	def test_nothing_known_says_nothing(self):
+		self.assertIsNone(realdebrid.days_left())
+		self.assertEqual(debrid.expiring_soon(), [])
+
+	def test_torbox_dates_are_understood(self):
+		# Half a day past the boundary, so the whole-days floor is not a
+		# race against how long the test takes to run.
+		import time as _time
+		soon = _time.strftime('%Y-%m-%dT%H:%M:%S.000Z',
+							  _time.gmtime(_time.time() + 2.5 * 86400))
+		self.assertEqual(torbox._days_until(soon), 2)
+		past = _time.strftime('%Y-%m-%dT%H:%M:%S.000Z',
+							  _time.gmtime(_time.time() - 86400))
+		self.assertEqual(torbox._days_until(past), 0)
+		self.assertIsNone(torbox._days_until(''))
+		self.assertIsNone(torbox._days_until('not a date'))
+
+	def test_the_user_is_told_once_a_day_not_once_a_click(self):
+		from resources.lib import router
+		self._days(2)
+		with mock.patch('resources.lib.debrid.account_status',
+						return_value=(True, 'fine')), \
+				mock.patch('resources.lib.scrapers.available', return_value=True), \
+				mock.patch('resources.lib.trakt.authorized', return_value=True):
+			router._preflight()
+			first = len(self.dialogs('notification'))
+			router._preflight()
+			second = len(self.dialogs('notification'))
+		self.assertEqual(first, 1)
+		self.assertEqual(second, 1)
+		self.assertIn('2', self.last_dialog('notification')[2])

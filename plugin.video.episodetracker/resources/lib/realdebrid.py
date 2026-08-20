@@ -268,14 +268,32 @@ def account_status():
 		seconds = int(info.get('premium', 0) or 0)
 	except (TypeError, ValueError):
 		seconds = 0
+	days = seconds // 86400
 	if info.get('type') != 'premium' or seconds <= 0:
 		result = (False, 'Real-Debrid account "%s" has no active premium time. '
 						 'Torrents cannot be resolved without it.'
 				  % info.get('username', '?'))
+		days = 0
 	else:
-		result = (True, 'premium, %d days left' % (seconds // 86400))
-	cache.set('rd_account_status', {'ok': result[0], 'message': result[1]}, hours=1)
+		result = (True, 'premium, %d days left' % days)
+	cache.set('rd_account_status',
+			  {'ok': result[0], 'message': result[1], 'days': days}, hours=1)
 	return result
+
+
+def days_left():
+	"""Days of subscription remaining, or None if not known.
+
+	Read from the cached account result rather than asked for, so this
+	costs nothing and can be consulted freely.
+	"""
+	cached = cache.get('rd_account_status')
+	if not cached or cached.get('days') is None:
+		return None
+	try:
+		return int(cached['days'])
+	except (TypeError, ValueError):
+		return None
 
 
 # ---------------------------------------------------------------------------

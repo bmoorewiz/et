@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.10.2" provider-name="bmoorewiz">
+<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.11.0" provider-name="bmoorewiz">
 	<requires>
 		<import addon="xbmc.python" version="3.0.0" />
 		<import addon="script.module.requests" version="2.22.0" />
@@ -24,6 +24,6 @@
 			<icon>resources/icon.png</icon>
 			<fanart>resources/fanart.png</fanart>
 		</assets>
-		<news>v1.10.2 - Fixes TorBox rarely being used: one failed account check was switching its cache check off for the whole session.</news>
+		<news>v1.11.0 - An expired debrid subscription is now stepped over automatically, so the other service takes over on its own.</news>
 	</extension>
 </addon>

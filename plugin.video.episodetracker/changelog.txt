@@ -1,3 +1,15 @@
+v1.11.0
+- A debrid service that can no longer serve is now stepped over
+  automatically. When a Real-Debrid subscription lapses, TorBox simply
+  takes over - the same in reverse - instead of every source failing
+  through the dead one first. The add-on already knew the account had
+  expired; nothing acted on it.
+- If only one service is set up it is still tried, expired or not, because
+  its real error is more use than silence.
+- A subscription with three days or less left now says so, once a day, so
+  a lapse is not a surprise - with a second service configured nothing
+  visibly breaks when it happens.
+
 v1.10.2
 - Fixed TorBox rarely being used even when it had the torrent. Its cache
   check was being switched off for the whole session by a single failed

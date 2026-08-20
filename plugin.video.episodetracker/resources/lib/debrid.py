@@ -107,6 +107,45 @@ def order_for(source_cached_by):
 	return sorted(names, key=lambda name: health.benched(name))
 
 
+def serviceable(name):
+	"""Can this provider actually serve a stream right now?
+
+	An expired subscription, a free plan or a rejected key all mean no.
+	The answer is cached for an hour by each provider's own account check,
+	so asking per source costs nothing.
+	"""
+	if health.benched(name):
+		return False
+	try:
+		ok, _message = _MODULES[name].account_status()
+	except Exception:
+		control.error('%s account check failed' % name)
+		return True  # unknown is not the same as no; do not exclude on a guess
+	return bool(ok)
+
+
+def _usable(names):
+	"""Split providers into those that can serve now and those that cannot."""
+	usable = [name for name in names if serviceable(name)]
+	return usable, [name for name in names if name not in usable]
+
+
+def days_left(name):
+	module_ = _MODULES.get(name)
+	getter = getattr(module_, 'days_left', None)
+	return getter() if getter else None
+
+
+def expiring_soon(within_days=3):
+	"""Providers whose subscription runs out shortly: ``[(name, days)]``."""
+	soon = []
+	for name in providers():
+		days = days_left(name)
+		if days is not None and 0 < days <= within_days:
+			soon.append((name, days))
+	return soon
+
+
 def resolve_magnet(magnet, info_hash, season=None, episode=None, title='',
 				   cached_by=None):
 	"""Try each enabled provider, whoever has it cached first.
@@ -118,6 +157,18 @@ def resolve_magnet(magnet, info_hash, season=None, episode=None, title='',
 	names = order_for(cached_by)
 	if not names:
 		return None, 'No debrid provider is set up.', None
+
+	# Leave out anything that cannot serve right now - a lapsed
+	# subscription is the common one - so the other provider simply takes
+	# over instead of every source failing through the dead one first.
+	# Only while something else is left: with one provider its real error
+	# is far more use than silence.
+	usable, unusable = _usable(names)
+	if usable and unusable:
+		control.log('skipping %s (cannot serve right now); using %s'
+					% (', '.join(unusable), ', '.join(usable)))
+		names = usable
+
 	errors = []
 	for name in names:
 		try:
