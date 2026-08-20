@@ -1,3 +1,18 @@
+v1.10.1
+- A debrid service that stops answering is now set aside for a few minutes
+  instead of being retried for every source. With the box offline, each of
+  twelve sources was waiting out a 30-second timeout twice over, so a
+  failed playback took twelve minutes; it now takes seconds.
+- Network timeouts shortened. These are small requests, and a 30-second
+  (Real-Debrid: 45-second) wait only ever delayed bad news.
+- "TorBox did not accept the stored API key" is no longer shown when the
+  real problem is the network. It now says TorBox could not be reached,
+  which is the difference between checking your wifi and regenerating a
+  key that was working fine.
+- Whichever service is actually answering is tried first.
+- The diagnostics report now includes the settings added since it was
+  written - season packs, resume, play-next and the list options.
+
 v1.10.0
 - Next Episodes now shows what is left of anything you started and did not
   finish, e.g. "(26m left)", so you can tell at a glance whether there is

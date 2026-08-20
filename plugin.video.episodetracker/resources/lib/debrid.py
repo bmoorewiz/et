@@ -8,6 +8,7 @@ torrent uncached on one is often cached on the other.
 """
 
 from resources.lib import control
+from resources.lib import health
 from resources.lib import realdebrid
 from resources.lib import torbox
 
@@ -91,10 +92,14 @@ def order_for(source_cached_by):
 	cache information still get their turn, just afterwards.
 	"""
 	names = providers()
-	if not source_cached_by:
-		return names
-	holders = [n for n in names if n in source_cached_by]
-	return holders + [n for n in names if n not in holders]
+	if source_cached_by:
+		holders = [n for n in names if n in source_cached_by]
+		names = holders + [n for n in names if n not in holders]
+	# A provider that has stopped answering goes last whatever the order.
+	# It still gets its turn - the request layer returns immediately while
+	# it is benched, so this costs nothing - but the one that can actually
+	# serve the stream is asked first.
+	return sorted(names, key=lambda name: health.benched(name))
 
 
 def resolve_magnet(magnet, info_hash, season=None, episode=None, title='',

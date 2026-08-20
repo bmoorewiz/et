@@ -16,6 +16,7 @@ from requests.adapters import HTTPAdapter
 
 from resources.lib import control
 from resources.lib import cache
+from resources.lib import health
 from resources.lib import mediafiles
 
 REST_BASE = 'https://api.real-debrid.com/rest/1.0/'
@@ -28,6 +29,12 @@ VIDEO_EXTENSIONS = mediafiles.VIDEO_EXTENSIONS
 
 # Real-Debrid rate limits and disallows too many simultaneous magnet resolves.
 _resolve_semaphore = threading.Semaphore(3)
+
+NAME = 'Real-Debrid'
+# (connect, read). These are small JSON round trips; the old flat 45 meant
+# a box that had lost its network spent three quarters of a minute per
+# request finding that out.
+_TIMEOUT = (10, 20)
 
 _session = requests.Session()
 _session.mount('https://api.real-debrid.com', HTTPAdapter(pool_maxsize=20))
@@ -50,13 +57,19 @@ def _get(path, retry=True):
 		return None
 	url = REST_BASE + path
 	url += ('&' if '?' in url else '?') + 'auth_token=%s' % _token()
-	try:
-		resp = _session.get(url, timeout=45)
-		data = resp.json() if resp.content else None
-	except ValueError:
+	if health.benched(NAME):
+		control.debug('skipping Real-Debrid GET %s: not answering' % path)
 		return None
+	try:
+		resp = _session.get(url, timeout=_TIMEOUT)
 	except Exception:
 		control.error('rd get failed: %s' % path)
+		health.record_failure(NAME)
+		return None
+	health.record_success(NAME)
+	try:
+		data = resp.json() if resp.content else None
+	except ValueError:
 		return None
 	if _is_bad_token(data) and retry:
 		if refresh_token():
@@ -69,16 +82,22 @@ def _post(path, payload, retry=True):
 		return None
 	url = REST_BASE + path
 	url += ('&' if '?' in url else '?') + 'auth_token=%s' % _token()
+	if health.benched(NAME):
+		control.debug('skipping Real-Debrid POST %s: not answering' % path)
+		return None
 	try:
-		resp = _session.post(url, data=payload, timeout=20)
+		resp = _session.post(url, data=payload, timeout=_TIMEOUT)
+	except Exception:
+		control.error('rd post failed: %s' % path)
+		health.record_failure(NAME)
+		return None
+	health.record_success(NAME)
+	try:
 		if resp.status_code == 204:
 			return {}
 		data = resp.json() if resp.content else {}
 	except ValueError:
 		return {}
-	except Exception:
-		control.error('rd post failed: %s' % path)
-		return None
 	if _is_bad_token(data) and retry:
 		if refresh_token():
 			return _post(path, payload, retry=False)
@@ -91,7 +110,7 @@ def _delete(path):
 	url = REST_BASE + path
 	url += ('&' if '?' in url else '?') + 'auth_token=%s' % _token()
 	try:
-		return _session.delete(url, timeout=20)
+		return _session.delete(url, timeout=_TIMEOUT)
 	except Exception:
 		control.error('rd delete failed: %s' % path)
 		return None

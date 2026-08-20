@@ -19,6 +19,7 @@ from requests.adapters import HTTPAdapter
 
 from resources.lib import control
 from resources.lib import cache
+from resources.lib import health
 from resources.lib import mediafiles
 from resources.lib.realdebrid import _episode_match
 
@@ -30,9 +31,18 @@ REQUEST_DL = '/torrents/requestdl'
 CONTROL = '/torrents/controltorrent'
 USER = '/user/me'
 
-_TIMEOUT = 30
+# (connect, read). Every one of these calls is a small JSON round trip, so
+# a read that has not started after fifteen seconds is not going to.
+# A single flat 30 was costing a minute per source with the box offline.
+_TIMEOUT = (10, 15)
+NAME = 'TorBox'
 _session = requests.Session()
 _session.mount(BASE, HTTPAdapter(pool_maxsize=10))
+
+# Set when a request got no answer at all, as opposed to an answer that
+# said no. account_status() needs to tell those apart, because telling
+# someone to re-enter a working API key is worse than saying nothing.
+_UNREACHABLE = 'unreachable'
 
 
 def api_key():
@@ -57,14 +67,21 @@ def _headers():
 def _request(method, path, **kwargs):
 	if not api_key():
 		return None
+	if health.benched(NAME):
+		control.debug('skipping TorBox %s %s: not answering' % (method, path))
+		return _UNREACHABLE
 	try:
 		resp = _session.request(method, BASE + path, headers=_headers(),
 								timeout=_TIMEOUT, **kwargs)
-		return resp.json() if resp.content else None
-	except ValueError:
-		return None
 	except Exception:
 		control.error('torbox %s %s failed' % (method, path))
+		health.record_failure(NAME)
+		return _UNREACHABLE
+	# An answer arrived. Whatever it says, TorBox is reachable.
+	health.record_success(NAME)
+	try:
+		return resp.json() if resp.content else None
+	except ValueError:
 		return None
 
 
@@ -92,6 +109,8 @@ def error_text(data):
 
 def account_info():
 	result = _get(USER, params={'settings': 'false'})
+	if result is _UNREACHABLE:
+		return _UNREACHABLE
 	if isinstance(result, dict) and result.get('success'):
 		return result.get('data') or {}
 	return None
@@ -106,6 +125,12 @@ def account_status():
 		return bool(cached.get('ok')), cached.get('message', '')
 
 	info = account_info()
+	if info is _UNREACHABLE:
+		# Not the same thing as a bad key, and must not be reported as one:
+		# sending someone off to regenerate a perfectly good key because
+		# their box lost DNS is worse than saying nothing useful.
+		return False, ('TorBox could not be reached. This is usually the '
+					   'network rather than your API key.')
 	if not info:
 		# never cache a transient failure
 		return False, ('TorBox did not accept the stored API key. '
