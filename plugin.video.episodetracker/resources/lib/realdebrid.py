@@ -58,7 +58,7 @@ def _get(path, retry=True):
 		return None
 	url = REST_BASE + path
 	url += ('&' if '?' in url else '?') + 'auth_token=%s' % _token()
-	if health.benched(NAME):
+	if health.benched(NAME) and not health.take_probe(NAME):
 		control.debug('skipping Real-Debrid GET %s: not answering' % path)
 		return None
 	try:
@@ -83,7 +83,7 @@ def _post(path, payload, retry=True):
 		return None
 	url = REST_BASE + path
 	url += ('&' if '?' in url else '?') + 'auth_token=%s' % _token()
-	if health.benched(NAME):
+	if health.benched(NAME) and not health.take_probe(NAME):
 		control.debug('skipping Real-Debrid POST %s: not answering' % path)
 		return None
 	try:

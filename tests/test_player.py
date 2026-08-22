@@ -226,6 +226,12 @@ class Play(AddonTestCase):
 		super(Play, self).setUp()
 		self.set(**{'rd.token': 'token', 'scrobble.enabled': True,
 					'trakt.token': 'trakt-token'})
+		# These test what happens as sources fail, which needs a provider
+		# that can serve. A real outage stops the queue instead, and has
+		# its own tests below.
+		healthy = mock.patch('resources.lib.debrid.stalled', return_value=None)
+		healthy.start()
+		self.addCleanup(healthy.stop)
 
 	def _resolve(self, results):
 		"""results: list of (url, error, provider) returned in order."""

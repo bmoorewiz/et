@@ -45,11 +45,17 @@ def _store(name, state):
 def record_failure(name):
 	"""A request to this provider got no answer at all."""
 	state = _state(name)
+	already = (state.get('until') or 0) > time.time()
 	state['failures'] = int(state.get('failures') or 0) + 1
 	if state['failures'] >= FAILURES_BEFORE_BENCH:
 		state['until'] = time.time() + BENCH_SECONDS
-		control.log('%s is not answering; setting it aside for %d minutes'
-					% (name, BENCH_SECONDS // 60))
+		if not already:
+			# A fresh bench gets a fresh trial request. Not a renewed one:
+			# that failure *was* the trial, and handing out another every
+			# time one fails would be no bench at all.
+			state['probed'] = False
+			control.log('%s is not answering; setting it aside for %d minutes'
+						% (name, BENCH_SECONDS // 60))
 	_store(name, state)
 	return state['failures']
 
@@ -61,9 +67,33 @@ def record_success(name):
 
 
 def benched(name, now=None):
-	"""Is this provider currently set aside?"""
+	"""Is this provider currently set aside? Asking does not change it."""
 	now = time.time() if now is None else now
 	return (_state(name).get('until') or 0) > now
+
+
+def probe_available(name, now=None):
+	"""Is the one trial request for this bench still unused?
+
+	A bench with no way out until the clock runs down turns a half-minute
+	of bad wifi into five minutes of nothing playing, which is what
+	happened: two timeouts benched TorBox, and every source after that
+	failed instantly against a service that was already answering again.
+	One trial request per bench is the missing half-open state - cheap
+	when the provider is still down, and immediate when it is not.
+	"""
+	return benched(name, now) and not _state(name).get('probed')
+
+
+def take_probe(name, now=None):
+	"""Claim the trial request. True if this call may go ahead."""
+	if not probe_available(name, now):
+		return False
+	state = _state(name)
+	state['probed'] = True
+	_store(name, state)
+	control.log('%s is benched; trying it once to see if it is back' % name)
+	return True
 
 
 def clear(name=None):

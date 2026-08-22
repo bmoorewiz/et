@@ -72,10 +72,38 @@ class TorBoxStopsWaiting(AddonTestCase):
 								 side_effect=OSError('read timed out'))
 
 	def test_it_stops_calling_out_after_two_dead_requests(self):
+		# Two failures bench it, and one trial request is allowed after
+		# that so a provider which has come back is noticed. Twelve
+		# attempts must not mean twelve timeouts.
 		with self._offline() as request:
 			for _attempt in range(12):
 				torbox._get('/torrents/checkcached')
-		self.assertEqual(request.call_count, health.FAILURES_BEFORE_BENCH)
+		self.assertEqual(request.call_count, health.FAILURES_BEFORE_BENCH + 1)
+
+	def test_the_trial_request_is_offered_once_and_not_again(self):
+		with self._offline():
+			torbox._get('/torrents/checkcached')
+			torbox._get('/torrents/checkcached')
+		self.assertTrue(health.probe_available('TorBox'))
+		with self._offline() as request:
+			torbox._get('/torrents/checkcached')   # spends the trial
+			torbox._get('/torrents/checkcached')   # must not go out
+		self.assertEqual(request.call_count, 1)
+		self.assertFalse(health.probe_available('TorBox'))
+
+	def test_a_provider_that_comes_back_is_picked_up_immediately(self):
+		# The reported failure: TorBox recovered within seconds and every
+		# source still failed against it for the rest of the bench.
+		with self._offline():
+			torbox._get('/torrents/checkcached')
+			torbox._get('/torrents/checkcached')
+		self.assertTrue(health.benched('TorBox'))
+		response = mock.Mock(content=b'{"success": true}')
+		response.json.return_value = {'success': True}
+		with mock.patch.object(torbox._session, 'request', return_value=response):
+			self.assertIsNot(torbox._get('/torrents/checkcached'),
+							 torbox._UNREACHABLE)
+		self.assertFalse(health.benched('TorBox'))
 
 	def test_the_timeout_is_not_half_a_minute(self):
 		# A minute per source, twice per source, was the whole problem.
@@ -91,12 +119,14 @@ class TorBoxStopsWaiting(AddonTestCase):
 				torbox._get('/torrents/checkcached')
 		self.assertFalse(health.benched('TorBox'))
 
-	def test_resolving_gives_up_immediately_while_benched(self):
+	def test_resolving_gives_up_almost_immediately_while_benched(self):
 		health.record_failure('TorBox')
 		health.record_failure('TorBox')
-		with mock.patch.object(torbox._session, 'request') as request:
+		with mock.patch.object(torbox._session, 'request',
+							   side_effect=OSError('still down')) as request:
 			url, error = torbox.resolve_magnet('magnet:?x', 'abc', 1, 2)
-		request.assert_not_called()
+		# One trial request, not a resolve's worth of timeouts.
+		self.assertEqual(request.call_count, 1)
 		self.assertIsNone(url)
 		self.assertTrue(error)
 
@@ -111,7 +141,8 @@ class RealDebridStopsWaiting(AddonTestCase):
 							   side_effect=OSError('no address')) as get:
 			for _attempt in range(12):
 				realdebrid._get('torrents')
-		self.assertEqual(get.call_count, health.FAILURES_BEFORE_BENCH)
+		# Two to bench it, plus the single trial request.
+		self.assertEqual(get.call_count, health.FAILURES_BEFORE_BENCH + 1)
 
 	def test_the_timeout_is_not_three_quarters_of_a_minute(self):
 		connect, read = realdebrid._TIMEOUT
@@ -313,11 +344,20 @@ class ExpiredProviderStepsAside(AddonTestCase):
 	def test_a_benched_provider_is_also_unserviceable(self):
 		health.record_failure('TorBox')
 		health.record_failure('TorBox')
+		health.take_probe('TorBox')   # spend the trial request
 		# And answered from the bench alone: asking the account check would
 		# reach the same conclusion, but only after doing the work.
 		with mock.patch.object(torbox, 'account_status') as status:
 			self.assertFalse(debrid.serviceable('TorBox'))
 		status.assert_not_called()
+
+	def test_a_benched_provider_with_a_trial_left_is_not_written_off(self):
+		# Writing it off here would deny it the one request that lets it
+		# prove it is back.
+		health.record_failure('TorBox')
+		health.record_failure('TorBox')
+		with mock.patch.object(torbox, 'account_status', return_value=(True, 'ok')):
+			self.assertTrue(debrid.serviceable('TorBox'))
 
 
 class ExpiryWarning(AddonTestCase):
@@ -380,3 +420,77 @@ class ExpiryWarning(AddonTestCase):
 		self.assertEqual(first, 1)
 		self.assertEqual(second, 1)
 		self.assertIn('2', self.last_dialog('notification')[2])
+
+
+class OutageStopsTheQueueInsteadOfBurningIt(AddonTestCase):
+	"""The reported failure, end to end.
+
+	From the user's log: Real-Debrid expired, TorBox timed out twice and
+	was benched, and the next nineteen sources - forty-four of which
+	TorBox had reported cached seconds earlier - each failed in under a
+	second against two services that were both out. Ten seconds later the
+	queue was gone and the user had a generic error naming both.
+
+	Nothing about a source changes a provider outage, so the queue stops
+	and says which service is out, leaving the sources for when it is back.
+	"""
+
+	def setUp(self):
+		super(OutageStopsTheQueueInsteadOfBurningIt, self).setUp()
+		self.set(**{'rd.token': 'token', 'trakt.token': 't',
+					'torbox.api_key': 'k', 'torbox.enabled': True})
+
+	def _accounts(self, rd_ok, tb_ok):
+		return (mock.patch.object(realdebrid, 'account_status',
+								  return_value=(rd_ok, 'rd says so')),
+				mock.patch.object(torbox, 'account_status',
+								  return_value=(tb_ok, 'tb says so')))
+
+	def test_nothing_serviceable_is_reported_as_an_outage(self):
+		rd, tb = self._accounts(False, False)
+		with rd, tb:
+			self.assertTrue(debrid.stalled())
+
+	def test_one_working_provider_is_not_an_outage(self):
+		rd, tb = self._accounts(False, True)
+		with rd, tb:
+			self.assertIsNone(debrid.stalled())
+
+	def test_a_benched_provider_is_named_as_not_responding(self):
+		health.record_failure('TorBox')
+		health.record_failure('TorBox')
+		health.take_probe('TorBox')
+		rd, tb = self._accounts(False, True)
+		with rd, tb:
+			outage = debrid.stalled()
+		self.assertIn('TorBox is not responding', outage)
+
+	def test_the_queue_stops_rather_than_spending_every_source(self):
+		from resources.lib import player
+		queue = [{'quality': '1080p', 'name': 'n%d' % i, 'hash': 'h%d' % i,
+				  'seeders': 9, 'size': 4.0, 'provider': 'p'} for i in range(20)]
+		with mock.patch('resources.lib.player._candidates', return_value=queue), \
+				mock.patch('resources.lib.debrid.resolve_magnet',
+						   return_value=(None, 'nope', None)) as resolve, \
+				mock.patch('resources.lib.debrid.stalled',
+						   return_value='TorBox is not responding'):
+			player.play(queue[0], {'media_type': 'episode', 'show_title': 'S',
+								   'season': 1, 'episode': 1, 'runtime': 30})
+		self.assertEqual(resolve.call_count, 1,
+						 'the queue kept going through a provider outage')
+
+	def test_the_outage_is_what_the_user_is_told(self):
+		from resources.lib import player
+		queue = [{'quality': '1080p', 'name': 'n%d' % i, 'hash': 'h%d' % i,
+				  'seeders': 9, 'size': 4.0, 'provider': 'p'} for i in range(20)]
+		with mock.patch('resources.lib.player._candidates', return_value=queue), \
+				mock.patch('resources.lib.debrid.resolve_magnet',
+						   return_value=(None, 'Not cached on TorBox', None)), \
+				mock.patch('resources.lib.debrid.stalled',
+						   return_value='TorBox is not responding'):
+			player.play(queue[0], {'media_type': 'episode', 'show_title': 'S',
+								   'season': 1, 'episode': 1, 'runtime': 30})
+		shown = self.last_dialog('ok')[2]
+		self.assertIn('TorBox is not responding', shown)
+		# And not a source count that never happened.
+		self.assertNotIn('20 sources', shown)

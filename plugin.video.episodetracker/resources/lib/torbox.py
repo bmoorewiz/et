@@ -68,7 +68,7 @@ def _headers():
 def _request(method, path, **kwargs):
 	if not api_key():
 		return None
-	if health.benched(NAME):
+	if health.benched(NAME) and not health.take_probe(NAME):
 		control.debug('skipping TorBox %s %s: not answering' % (method, path))
 		return _UNREACHABLE
 	try:

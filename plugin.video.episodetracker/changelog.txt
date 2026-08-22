@@ -1,3 +1,17 @@
+v1.12.1
+- Fixes shows not playing. Two TorBox timeouts benched it for five
+  minutes, and with Real-Debrid expired there was nothing left: the next
+  nineteen sources each failed in under a second against two services
+  that were both out, and the queue was gone in ten seconds.
+- A benched service now gets one trial request per bench, so a provider
+  that comes back seconds later is used immediately instead of sitting
+  out the rest of the five minutes.
+- A provider outage stops the queue and names the service that is out.
+  Nothing about a source changes an outage, so the remaining sources are
+  left untried for when it is back rather than spent on a certainty.
+- The failure message counts the sources actually tried, not the number
+  queued.
+
 v1.12.0
 - Account credentials are kept in the add-on's own file as well as Kodi's
   settings, and put back whenever the settings copy has lost them. Kodi

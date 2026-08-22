@@ -254,17 +254,29 @@ def play(source, entry):
 	pd.create(control.addon_name,
 			  control.langf(33013, ', '.join(debrid.providers()) or '-'))
 	resolved, error, provider = None, None, None
+	attempted = 0
 	try:
 		for position, candidate in enumerate(queue, 1):
 			pd.update(int((position - 1) * 100 / len(queue)),
 					  control.langf(33043, position, len(queue),
 									candidate.get('quality', '')))
 			resolved, error, provider = _resolve_one(candidate, entry)
+			attempted = position
 			if resolved:
 				source = candidate
 				break
 			control.log('source %d/%d failed: %s' % (position, len(queue), error))
 			if control.aborted():
+				break
+			# Once no provider can serve, every remaining source fails the
+			# same way in a fraction of a second. Stopping keeps them
+			# untried for when the service is back, and reports the real
+			# reason instead of whatever the last source happened to say.
+			outage = debrid.stalled()
+			if outage:
+				control.log('stopping the queue after %d of %d: %s'
+							% (position, len(queue), outage))
+				error = outage
 				break
 	finally:
 		pd.close()
@@ -273,10 +285,14 @@ def play(source, entry):
 		# Show why, rather than a generic failure. The underlying reason is the
 		# whole value here, so never let a missing translation swallow it.
 		message = error or control.lang(33014) or 'Could not resolve a playable link.'
-		if len(queue) > 1:
-			wrapped = control.langf(33044, len(queue), message)
+		# How many were actually tried, not how many were queued: the loop
+		# now stops early when no provider can serve, and claiming twenty
+		# attempts when there were two sends the user hunting for a
+		# problem with the sources.
+		if attempted > 1:
+			wrapped = control.langf(33044, attempted, message)
 			message = (wrapped if wrapped.strip() and message in wrapped
-					   else '%s (tried %d sources)' % (message, len(queue)))
+					   else '%s (tried %d sources)' % (message, attempted))
 		skipped = untried_tiers(source, entry)
 		if skipped:
 			message += '[CR][CR]' + control.langf(

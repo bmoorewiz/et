@@ -114,7 +114,9 @@ def serviceable(name):
 	The answer is cached for an hour by each provider's own account check,
 	so asking per source costs nothing.
 	"""
-	if health.benched(name):
+	# A benched provider with its trial request still unspent is not yet
+	# written off - that request is exactly how it gets to prove it is back.
+	if health.benched(name) and not health.probe_available(name):
 		return False
 	try:
 		ok, _message = _MODULES[name].account_status()
@@ -122,6 +124,37 @@ def serviceable(name):
 		control.error('%s account check failed' % name)
 		return True  # unknown is not the same as no; do not exclude on a guess
 	return bool(ok)
+
+
+def stalled():
+	"""Why no enabled provider can serve right now, or None if one can.
+
+	Playback walks up to twenty sources. If every provider is out - one
+	expired, the other benched for not answering - each of those twenty
+	fails the same way in a fraction of a second, and the queue is gone in
+	ten seconds flat. That is what turned half a minute of bad wifi into
+	"shows are not playing": nineteen sources that were cached and ready
+	were burned against a service that was briefly unreachable, and the
+	user got a generic failure naming both providers.
+
+	Nothing about a source changes any of that, so the queue should stop
+	and say which service is out. The sources are then still there to try
+	when it comes back.
+	"""
+	names = providers()
+	if not names or any(serviceable(name) for name in names):
+		return None
+	reasons = []
+	for name in names:
+		if health.benched(name):
+			reasons.append('%s is not responding' % name)
+			continue
+		try:
+			_ok, message = _MODULES[name].account_status()
+		except Exception:
+			message = 'could not be checked'
+		reasons.append('%s: %s' % (name, message))
+	return ' | '.join(reasons)
 
 
 def _usable(names):
