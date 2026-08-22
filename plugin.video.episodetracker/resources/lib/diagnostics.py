@@ -199,6 +199,59 @@ def _stored_settings():
 	return stored
 
 
+def storage_problem():
+	"""One line describing why settings are not working, or None if they are.
+
+	Cheap enough to call while building a menu: two small XML files and no
+	network. Kept separate from the full report because the failure it
+	looks for is the one that hides every other symptom - when settings do
+	not load or do not save, the add-on presents as signed out of
+	everything and nothing on screen says why.
+	"""
+	try:
+		if _declared_settings() is None:
+			return control.lang(33105)
+		if unreadable_settings():
+			return control.lang(33106)
+		if not profile_writable():
+			return control.lang(33107)
+	except Exception:
+		control.error('settings health check failed')
+	return None
+
+
+def profile_writable():
+	"""Can the add-on write to its own data directory at all?
+
+	Tested with a real file rather than by writing a setting. Kodi's
+	getSetting() reads its in-memory copy, so a setting written to a
+	read-only or full profile still reads back correctly and proves
+	nothing - which is the trap this check exists to avoid. A device out
+	of storage is the common cause, and it takes every credential with it
+	the next time Kodi rewrites the file.
+	"""
+	path = os.path.join(control.profile_path, '.write-test')
+	try:
+		control.make_profile()
+		with open(path, 'w', encoding='utf-8') as handle:
+			handle.write('x')
+		os.remove(path)
+		return True
+	except Exception:
+		control.error('profile directory is not writable')
+		return False
+
+
+def unreadable_settings():
+	"""Declared settings with a value on disk that reads back empty."""
+	declared = _declared_settings()
+	stored = _stored_settings()
+	if declared is None or stored is None:
+		return []
+	return sorted(key for key, value in stored.items()
+				  if value and key in declared and not control.setting(key, ''))
+
+
 def _schema_health():
 	"""Whether the stored settings are actually reaching the add-on."""
 	declared = _declared_settings()

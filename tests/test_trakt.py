@@ -3,8 +3,11 @@
 
 from unittest import mock
 
+import xbmcgui
+
 from support import AddonTestCase, FakeResponse
 
+from resources.lib import control
 from resources.lib import trakt
 
 EPISODE = {
@@ -915,3 +918,50 @@ class PlaybackIndex(TraktBase):
 	def test_applying_nothing_leaves_entries_alone(self):
 		entries = [{'media_type': 'episode', 'ep_trakt': 999}]
 		self.assertEqual(trakt.apply_playback(entries, {}), entries)
+
+
+class AuthorizationThatDoesNotStick(AddonTestCase):
+	"""Linking Trakt on a device that cannot save the result.
+
+	Reported: the add-on showed "Authorize Trakt" in the menu, authorizing
+	appeared to work, and the next screen asked again. Announcing success
+	and then silently forgetting is the most confusing thing it can do, so
+	a token that does not reach the disk is now said out loud.
+	"""
+
+	class Response(FakeResponse):
+		def raise_for_status(self):
+			pass
+
+	def _authenticate(self, persists):
+		posts = {'code': self.Response({'device_code': 'D', 'user_code': 'U',
+										'interval': 0, 'expires_in': 60}),
+				 'token': self.Response({'access_token': 'T',
+										 'refresh_token': 'R',
+										 'created_at': 1, 'expires_in': 99})}
+
+		def post(url, **kwargs):
+			return posts['token' if url.endswith('/token') else 'code']
+
+		real = control.set_setting
+
+		def write(key, value):
+			real(key, value)
+			return persists
+
+		with mock.patch.object(trakt.requests, 'post', side_effect=post), \
+				mock.patch.object(control, 'set_setting', side_effect=write), \
+				mock.patch.object(trakt, '_fetch_username'), \
+				mock.patch.object(control, 'sleep'):
+			return trakt.authenticate()
+
+	def test_a_token_that_persists_reports_success(self):
+		self.assertTrue(self._authenticate(persists=True))
+
+	def test_a_token_that_does_not_persist_is_not_reported_as_success(self):
+		self.assertFalse(self._authenticate(persists=False))
+
+	def test_the_user_is_told_why_rather_than_just_failing(self):
+		self._authenticate(persists=False)
+		shown = ' '.join(str(part) for entry in xbmcgui.DIALOGS for part in entry)
+		self.assertIn('cannot save its settings', shown)

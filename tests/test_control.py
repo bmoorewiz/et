@@ -6,6 +6,8 @@ takes its token as a query parameter, so any network error puts the whole
 URL into a traceback, and Kodi logs get pasted into forum threads.
 """
 
+from unittest import mock
+
 import xbmcgui
 import xbmcplugin
 
@@ -155,3 +157,31 @@ class Redaction(AddonTestCase):
 
 	def test_redaction_never_raises(self):
 		self.assertTrue(control.redact(object()))
+
+
+class SettingWriteReporting(AddonTestCase):
+	"""A write that goes nowhere must not look like a write that worked.
+
+	control.set_setting() swallowed every failure, so an add-on that could
+	not save anything was indistinguishable from a working one: authorizing
+	an account announced success and the token was gone on the next read.
+	"""
+
+	def test_a_write_that_lands_reports_success(self):
+		self.assertIs(control.set_setting('trakt.user', 'someone'), True)
+		self.assertEqual(control.setting('trakt.user'), 'someone')
+
+	def test_a_write_that_raises_reports_failure(self):
+		import xbmcaddon
+		with mock.patch.object(xbmcaddon.Addon, 'setSetting',
+							   side_effect=RuntimeError('read-only')):
+			self.assertIs(control.set_setting('trakt.user', 'someone'), False)
+
+	def test_a_write_that_silently_does_not_stick_reports_failure(self):
+		import xbmcaddon
+		with mock.patch.object(xbmcaddon.Addon, 'setSetting', lambda *a: None):
+			self.assertIs(control.set_setting('trakt.user', 'someone'), False)
+
+	def test_clearing_a_setting_is_still_a_success(self):
+		control.set_setting('trakt.user', 'someone')
+		self.assertIs(control.set_setting('trakt.user', ''), True)

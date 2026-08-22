@@ -109,7 +109,7 @@ def authenticate():
 	pd.create(control.lang(33004),
 			  control.langf(33015, verify_url) + '\n[B]%s[/B]' % user_code)
 	deadline = time.time() + expires_in
-	success = False
+	success, stored = False, False
 	try:
 		while time.time() < deadline:
 			if pd.iscanceled() or control.aborted():
@@ -129,7 +129,7 @@ def authenticate():
 			except Exception:
 				continue
 			if token_resp.status_code == 200:
-				_store_token(token_resp.json())
+				stored = _store_token(token_resp.json())
 				success = True
 				break
 			# 400 = pending, 404 = invalid, 409 = already used, 410 = expired,
@@ -139,6 +139,12 @@ def authenticate():
 	finally:
 		pd.close()
 
+	if success and not stored:
+		# Trakt linked fine; the device did not keep the result. Saying
+		# "authorized" here and then showing "Authorize Trakt" on the next
+		# screen is the most confusing thing the add-on can do.
+		control.ok_dialog(control.lang(33104), heading=control.lang(33103))
+		return False
 	if success:
 		_fetch_username()
 		control.notify(33017)
@@ -148,11 +154,19 @@ def authenticate():
 
 
 def _store_token(data):
-	control.set_setting('trakt.token', data.get('access_token', ''))
+	"""Save a token set. Returns False if it did not reach the disk.
+
+	Worth the caller's attention rather than a log line: authorizing
+	against a profile that cannot be written succeeds all the way up to
+	here, so without this the add-on reports a linked account and then
+	asks to be authorized again on the very next screen.
+	"""
+	stored = control.set_setting('trakt.token', data.get('access_token', ''))
 	control.set_setting('trakt.refresh', data.get('refresh_token', ''))
 	created = int(data.get('created_at', time.time()))
 	expires_in = int(data.get('expires_in', 7776000))
 	control.set_setting('trakt.expires', str(created + expires_in))
+	return stored
 
 
 def _refresh_token():

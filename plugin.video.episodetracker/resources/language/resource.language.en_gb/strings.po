@@ -667,3 +667,23 @@ msgstr ""
 msgctxt "#33102"
 msgid "%s expires in %d day(s)"
 msgstr ""
+
+msgctxt "#33103"
+msgid "Upload diagnostics"
+msgstr ""
+
+msgctxt "#33104"
+msgid "Trakt signed in, but this device did not keep the result. Episode Tracker cannot save its settings - usually the Fire TV or Android device being out of storage space. Free some space and try again."
+msgstr ""
+
+msgctxt "#33105"
+msgid "Settings will not load - press to upload diagnostics"
+msgstr ""
+
+msgctxt "#33106"
+msgid "Saved settings are not reaching the add-on - press to upload diagnostics"
+msgstr ""
+
+msgctxt "#33107"
+msgid "Cannot save settings - this device may be out of storage. Press to upload diagnostics"
+msgstr ""

@@ -70,10 +70,30 @@ def setting(key, default=''):
 
 
 def set_setting(key, value):
+	"""Write a setting. Returns True only if the value actually stuck.
+
+	Kodi's setSetting() reports nothing when a write goes nowhere - a full
+	or read-only profile directory, or a settings schema that failed to
+	load, all fail in silence. Swallowing that made an add-on that cannot
+	save anything indistinguishable from one that is working: authorizing
+	an account announced success and the token was gone on the next read.
+	So the value is read straight back, which is cheap, and a write that
+	did not land says so.
+	"""
+	text = '' if value is None else str(value)
 	try:
-		addon.setSetting(key, '' if value is None else str(value))
+		addon.setSetting(key, text)
 	except Exception:
-		pass
+		error('could not write setting %s' % key)
+		return False
+	try:
+		if addon.getSetting(key) != text:
+			log('setting %s did not persist - the add-on cannot save settings'
+				% key)
+			return False
+	except Exception:
+		return False
+	return True
 
 
 def get_bool(key, default=False):

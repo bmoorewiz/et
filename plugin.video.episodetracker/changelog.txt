@@ -1,3 +1,15 @@
+v1.11.2
+- A device that cannot save settings now says so. Kodi reports nothing
+  when a setting write goes nowhere - a full or read-only profile fails
+  in silence - so the add-on presented as signed out of every account
+  with nothing on screen explaining why. Writes are now read back,
+  authorizing an account that does not persist says exactly that instead
+  of announcing success, and the main menu carries a one-line reason
+  whenever an account looks unlinked.
+- Diagnostics can be uploaded from the main menu. The one tool for
+  diagnosing a broken settings dialog should not live only behind the
+  settings dialog.
+
 v1.11.1
 - Fixes the hidden setting added in v1.11.0. It was the only setting in the
   add-on without a label, and it was written during ordinary browsing - in

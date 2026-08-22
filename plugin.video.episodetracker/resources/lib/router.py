@@ -160,12 +160,30 @@ def main_menu():
 			'[COLOR orange]%s[/COLOR]' % control.lang(33005),
 			{'action': 'rd_auth'}, is_folder=False)
 
+	# Only when something already looks unauthorized: that is exactly when
+	# "you are signed out" and "this device cannot keep your settings" look
+	# identical, and the second one is not worth a disk check on every visit
+	# to a menu that is working.
+	if not trakt.authorized() or not realdebrid.authorized():
+		from resources.lib import diagnostics
+		problem = diagnostics.storage_problem()
+		if problem:
+			control.add_directory_item('[COLOR red]%s[/COLOR]' % problem,
+									   {'action': 'upload_logs'},
+									   is_folder=False)
+
 	if not pending:
 		control.add_directory_item(
 			control.lang(33029), {'action': 'check_updates'}, is_folder=False)
 
 	control.add_directory_item(
 		control.lang(33003), {'action': 'settings'}, is_folder=False)
+
+	# Reachable from here as well as from Settings > Tools. The one tool for
+	# diagnosing a broken settings dialog cannot live only behind the
+	# settings dialog.
+	control.add_directory_item(
+		control.lang(33103), {'action': 'upload_logs'}, is_folder=False)
 
 	control.end_directory(content='')
 

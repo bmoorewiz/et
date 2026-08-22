@@ -225,3 +225,47 @@ class SchemaHealth(AddonTestCase):
 		self.assertIn('ARE NOT READABLE', report)
 		# The ids are named; the values behind them still must not be.
 		self.assertNotIn('abc123', report)
+
+
+class StoragePr0blem(AddonTestCase):
+	"""The one-line "why is nothing saving" check the menu shows.
+
+	Reported twice: the add-on presented as signed out of Trakt and
+	Real-Debrid at once, with a settings dialog that would not render, and
+	nothing on screen or in the report said why. Being signed out and being
+	unable to keep a setting look identical from the settings API.
+	"""
+
+	def test_a_healthy_install_reports_no_problem(self):
+		self.assertIsNone(diagnostics.storage_problem())
+
+	def test_a_schema_that_will_not_parse_is_reported(self):
+		with mock.patch.object(diagnostics, '_declared_settings',
+							   return_value=None):
+			self.assertIn('will not load', diagnostics.storage_problem().lower())
+
+	def test_values_that_do_not_reach_the_addon_are_reported(self):
+		with mock.patch.object(diagnostics, 'unreadable_settings',
+							   return_value=['trakt.token']):
+			self.assertIn('not reaching', diagnostics.storage_problem().lower())
+
+	def test_a_profile_that_cannot_be_written_is_reported(self):
+		with mock.patch.object(diagnostics, 'profile_writable',
+							   return_value=False):
+			self.assertIn('cannot save', diagnostics.storage_problem().lower())
+
+	def test_the_writability_test_uses_a_real_file_not_a_setting(self):
+		# A setting written to a full disk still reads back from memory, so
+		# probing with one proves nothing. This must touch the filesystem.
+		with mock.patch('builtins.open', side_effect=OSError('no space')):
+			self.assertFalse(diagnostics.profile_writable())
+
+	def test_it_leaves_no_file_behind(self):
+		self.assertTrue(diagnostics.profile_writable())
+		self.assertFalse(os.path.exists(
+			os.path.join(kodistubs.PROFILE, '.write-test')))
+
+	def test_a_broken_check_never_raises_into_the_menu(self):
+		with mock.patch.object(diagnostics, '_declared_settings',
+							   side_effect=RuntimeError('boom')):
+			self.assertIsNone(diagnostics.storage_problem())

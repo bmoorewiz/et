@@ -888,3 +888,49 @@ class ExpiryWarning(AddonTestCase):
 				mock.patch.object(control, 'set_setting') as write:
 			self._warn([('Real-Debrid', 2)])
 		write.assert_not_called()
+
+
+class StorageWarningInMenu(AddonTestCase):
+	"""Making "nothing is saving" visible, and reachable.
+
+	Reported: both Authorize rows showing at once, a settings dialog that
+	would not render, and no way to tell why - the diagnostics upload was
+	behind the very dialog that was broken.
+	"""
+
+	def build(self):
+		xbmcplugin.reset()
+		with mock.patch.object(router.updater, 'auto_check'):
+			router.main_menu()
+		return xbmcplugin.ITEMS
+
+	def labels(self):
+		return [entry['item'].label for entry in self.build()]
+
+	def test_diagnostics_are_reachable_without_the_settings_dialog(self):
+		urls = [entry['url'] for entry in self.build()]
+		self.assertTrue(any('upload_logs' in url for url in urls),
+						'no upload_logs entry in the root menu')
+
+	def test_a_storage_problem_is_shown_when_signed_out(self):
+		from resources.lib import diagnostics
+		with mock.patch.object(diagnostics, 'storage_problem',
+							   return_value='Cannot save settings'):
+			labels = self.labels()
+		self.assertTrue(any('Cannot save settings' in label for label in labels))
+
+	def test_nothing_is_shown_when_settings_are_healthy(self):
+		from resources.lib import diagnostics
+		with mock.patch.object(diagnostics, 'storage_problem',
+							   return_value=None):
+			labels = self.labels()
+		self.assertFalse(any('Cannot save' in label for label in labels))
+
+	def test_the_disk_check_is_skipped_while_accounts_look_fine(self):
+		# It touches the filesystem, so a working install must not pay for
+		# it on every visit to the menu.
+		from resources.lib import diagnostics
+		self.set(**{'trakt.token': 'x', 'rd.token': 'y'})
+		with mock.patch.object(diagnostics, 'storage_problem') as check:
+			self.labels()
+		check.assert_not_called()
