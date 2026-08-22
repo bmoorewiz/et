@@ -158,3 +158,70 @@ class Upload(AddonTestCase):
 			url, error = diagnostics.upload('report')
 		self.assertIsNone(url)
 		self.assertTrue(error)
+
+
+class SchemaHealth(AddonTestCase):
+	"""Telling a schema that did not load apart from being signed out.
+
+	Both look identical through the settings API - every value reads back
+	empty - and in v1.11.0 that ambiguity cost a whole round trip: the
+	add-on reported "Trakt is not authorized" and its settings dialog came
+	up blank, and a report built only from the API could not say which of
+	the two had happened.
+	"""
+
+	def _store(self, **values):
+		"""Write values into the profile settings file only.
+
+		Deliberately not through control.set_setting: the point is a value
+		that exists on disk but does not reach the add-on.
+		"""
+		os.makedirs(kodistubs.PROFILE, exist_ok=True)
+		body = ''.join('\t<setting id="%s">%s</setting>\n' % item
+					   for item in values.items())
+		path = os.path.join(kodistubs.PROFILE, 'settings.xml')
+		with open(path, 'w', encoding='utf-8') as handle:
+			handle.write('<settings version="2">\n%s</settings>\n' % body)
+		self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
+		return path
+
+	def test_a_value_on_disk_the_addon_cannot_read_is_called_out(self):
+		self._store(**{'trakt.token': 'abc123'})
+		report = '\n'.join(diagnostics._schema_health())
+		self.assertIn('ARE NOT READABLE', report)
+		self.assertIn('trakt.token', report)
+
+	def test_a_value_the_addon_can_read_is_not_called_out(self):
+		self.set(**{'trakt.token': 'abc123'})
+		self._store(**{'trakt.token': 'abc123'})
+		report = '\n'.join(diagnostics._schema_health())
+		self.assertIn('all readable', report)
+		self.assertNotIn('NOT READABLE', report)
+
+	def test_a_setting_the_schema_no_longer_declares_is_not_a_fault(self):
+		# A value left behind by a removed setting reads back empty because
+		# it no longer exists, which is correct rather than broken.
+		self._store(**{'logs.github_token': 'left-over'})
+		report = '\n'.join(diagnostics._schema_health())
+		self.assertIn('all readable', report)
+
+	def test_an_unparseable_schema_is_reported_as_the_cause(self):
+		with mock.patch.object(diagnostics, '_declared_settings',
+							   return_value=None):
+			report = '\n'.join(diagnostics._schema_health())
+		self.assertIn('WILL NOT PARSE', report)
+
+	def test_no_stored_file_yet_is_not_reported_as_a_fault(self):
+		path = os.path.join(kodistubs.PROFILE, 'settings.xml')
+		if os.path.exists(path):
+			os.remove(path)
+		report = '\n'.join(diagnostics._schema_health())
+		self.assertIn('nothing stored yet', report)
+
+	def test_the_check_reaches_the_report(self):
+		self._store(**{'trakt.token': 'abc123'})
+		with mock.patch.object(diagnostics, '_read_log_tail', return_value=None):
+			report = diagnostics.collect()
+		self.assertIn('ARE NOT READABLE', report)
+		# The ids are named; the values behind them still must not be.
+		self.assertNotIn('abc123', report)

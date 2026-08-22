@@ -843,3 +843,48 @@ class ResumePointOnTheList(AddonTestCase):
 
 	def test_junk_progress_does_not_break_the_item(self):
 		self.assertEqual(self._item(progress='lots').getProperty('ResumeTime'), '')
+
+
+class ExpiryWarning(AddonTestCase):
+	"""Warning that a subscription is nearly up, without writing a setting.
+
+	v1.11.0 kept the last-warned date in a hidden setting. That put a
+	setSetting() call on a path that runs during ordinary browsing, and in
+	Kodi that is not a quiet write: it rewrites the whole stored settings
+	file, and when the settings dialog happens to be open it is injected
+	into the open dialog instead. A once-a-day notification has no business
+	doing either.
+	"""
+
+	def _warn(self, soon):
+		with mock.patch.object(router.debrid, 'expiring_soon',
+							   return_value=soon):
+			router._warn_if_expiring()
+
+	def test_an_expiring_provider_is_mentioned(self):
+		with mock.patch.object(control, 'notify') as notify:
+			self._warn([('Real-Debrid', 2)])
+		self.assertEqual(notify.call_count, 1)
+		self.assertIn('Real-Debrid', notify.call_args[0][0])
+
+	def test_it_says_nothing_twice_in_one_day(self):
+		with mock.patch.object(control, 'notify') as notify:
+			self._warn([('Real-Debrid', 2)])
+			self._warn([('Real-Debrid', 2)])
+		self.assertEqual(notify.call_count, 1)
+
+	def test_nothing_expiring_says_nothing(self):
+		with mock.patch.object(control, 'notify') as notify:
+			self._warn([])
+		notify.assert_not_called()
+
+	def test_a_provider_that_cannot_be_checked_is_not_an_error(self):
+		with mock.patch.object(router.debrid, 'expiring_soon',
+							   side_effect=RuntimeError('offline')):
+			router._warn_if_expiring()  # must not raise
+
+	def test_no_setting_is_written(self):
+		with mock.patch.object(control, 'notify'), \
+				mock.patch.object(control, 'set_setting') as write:
+			self._warn([('Real-Debrid', 2)])
+		write.assert_not_called()

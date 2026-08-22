@@ -31,7 +31,6 @@
 
 		<setting label="32097" type="lsep" /><!-- Provider order -->
 		<setting id="debrid.priority" type="enum" label="32098" values="Real-Debrid first|TorBox first" default="0" />
-		<setting id="debrid.expiry_warned" type="text" default="" visible="false" />
 	</category>
 
 	<category label="32040"><!-- Playback -->

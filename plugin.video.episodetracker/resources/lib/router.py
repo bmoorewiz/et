@@ -630,12 +630,23 @@ def _preflight():
 	return True
 
 
+_EXPIRY_WARNED = 'debrid_expiry_warned'
+
+
 def _warn_if_expiring():
 	"""Mention a subscription about to run out, at most once a day.
 
 	Worth saying before it lapses rather than after: with a second service
 	set up nothing will visibly break when it does, so the only signal
 	would be one provider quietly doing all the work.
+
+	The date last warned on is kept in the add-on's own cache rather than in
+	a setting. It is bookkeeping, not a preference, and it is written from a
+	path that runs during ordinary browsing - and a setting write is not a
+	quiet thing in Kodi. setSetting() rewrites the whole stored settings
+	file, and when the settings dialog happens to be open it is injected
+	into that dialog instead of being saved. Neither belongs behind a
+	notification.
 	"""
 	try:
 		soon = debrid.expiring_soon()
@@ -644,9 +655,9 @@ def _warn_if_expiring():
 	if not soon:
 		return
 	today = time.strftime('%Y-%m-%d')
-	if control.setting('debrid.expiry_warned') == today:
+	if cache.get(_EXPIRY_WARNED) == today:
 		return
-	control.set_setting('debrid.expiry_warned', today)
+	cache.set(_EXPIRY_WARNED, today, hours=48)
 	for name, days in soon:
 		control.notify(control.langf(33102, name, days))
 

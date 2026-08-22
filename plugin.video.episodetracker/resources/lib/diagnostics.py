@@ -21,6 +21,7 @@ import os
 import platform
 import sys
 import time
+import xml.etree.ElementTree as ElementTree
 
 import requests
 
@@ -158,8 +159,84 @@ def _scrapers():
 	return lines
 
 
+def _declared_settings():
+	"""Setting ids in the shipped schema, or None if it will not parse."""
+	path = os.path.join(control.addon_path, 'resources', 'settings.xml')
+	try:
+		root = ElementTree.parse(path).getroot()
+	except Exception:
+		return None
+	return {element.get('id') for element in root.iter('setting')
+			if element.get('id')}
+
+
+def _stored_settings():
+	"""Setting ids that have a value in the add-on's own data file.
+
+	Read off disk rather than through the settings API, because the two
+	disagreeing is itself the diagnosis. Kodi only hands a stored value back
+	if it could also load resources/settings.xml, so a value that is on disk
+	but reads back empty means the schema did not load - and when that
+	happens *every* setting reads empty at once, which looks exactly like
+	being signed out of everything while the settings dialog renders blank.
+	Nothing else produces that pair of symptoms, and nothing in a report
+	built only from the API can tell it apart from genuinely signing out.
+	"""
+	path = os.path.join(control.profile_path, 'settings.xml')
+	try:
+		root = ElementTree.parse(path).getroot()
+	except Exception:
+		return None
+	stored = {}
+	for element in root.iter('setting'):
+		key = element.get('id')
+		if not key:
+			continue
+		# Kodi 19+ writes the value as element text; older builds used a
+		# value attribute. Reports come from both.
+		value = element.get('value')
+		stored[key] = (element.text or '') if value is None else value
+	return stored
+
+
+def _schema_health():
+	"""Whether the stored settings are actually reaching the add-on."""
+	declared = _declared_settings()
+	if declared is None:
+		return ['', '--- settings ---',
+				'schema               : resources/settings.xml WILL NOT PARSE.',
+				'                       Every setting reads back empty, so the '
+				'add-on looks signed out',
+				'                       of everything and its settings dialog '
+				'has nothing to show.']
+
+	stored = _stored_settings()
+	if stored is None:
+		return ['', '--- settings ---',
+				'schema               : %d settings declared, nothing stored yet'
+				% len(declared)]
+
+	# Only ids the current schema still declares: a value left behind by a
+	# setting since removed reads back empty because it no longer exists,
+	# which is correct rather than a fault.
+	unreadable = sorted(key for key, value in stored.items()
+						if value and key in declared
+						and not control.setting(key, ''))
+	if not unreadable:
+		return ['', '--- settings ---',
+				'schema               : %d declared, %d stored, all readable'
+				% (len(declared), len(stored))]
+	return ['', '--- settings ---',
+			'schema               : %d of %d stored values ARE NOT READABLE.'
+			% (len(unreadable), len(stored)),
+			'                       resources/settings.xml did not load, so '
+			'these have a value on',
+			'                       disk that the add-on reads back as empty:',
+			'                       %s' % ', '.join(unreadable)]
+
+
 def _settings_snapshot():
-	lines = ['', '--- settings ---']
+	lines = _schema_health()
 	for key in _REPORTED_SETTINGS:
 		lines.append('%-28s = %s' % (key, control.setting(key, '<unset>')))
 	for key in _SECRET_SETTINGS:

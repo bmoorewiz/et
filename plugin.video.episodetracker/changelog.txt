@@ -1,3 +1,16 @@
+v1.11.1
+- Fixes the hidden setting added in v1.11.0. It was the only setting in the
+  add-on without a label, and it was written during ordinary browsing - in
+  Kodi that rewrites the whole stored settings file, and lands in the
+  settings dialog itself when one is open. The date of the last expiry
+  reminder is bookkeeping, not a preference, so it now lives in the
+  add-on's own cache and the setting is gone.
+- Diagnostics now report whether stored settings are actually reaching the
+  add-on. If a value is on disk but reads back empty, the schema did not
+  load - which makes the add-on look signed out of everything and its
+  settings dialog come up blank. Through the settings API alone that is
+  indistinguishable from genuinely signing out; the report now says which.
+
 v1.11.0
 - A debrid service that can no longer serve is now stepped over
   automatically. When a Real-Debrid subscription lapses, TorBox simply

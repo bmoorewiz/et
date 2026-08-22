@@ -190,6 +190,17 @@ class SettingsSchema(AddonTestCase):
 		unused = sorted(self.declared - self._mentioned())
 		self.assertEqual(unused, [], 'declared but never read: %s' % unused)
 
+	def test_every_setting_declares_a_label(self):
+		# Kodi does not reject a setting with no label - it invents one, a
+		# single space - so the setting still exists and the only sign is a
+		# nameless row in the dialog. Nothing else in this file was missing
+		# one, which is the point: the odd one out is the mistake.
+		nameless = [element for element
+					in re.findall(r'<setting\s+id="[^"]*"[^>]*>', self.schema)
+					if 'label=' not in element]
+		self.assertEqual(nameless, [],
+						 'settings with an id but no label: %s' % nameless)
+
 	def test_no_setting_id_is_declared_twice(self):
 		ids = re.findall(r'<setting\s+id="([^"]+)"', self.schema)
 		duplicates = sorted({i for i in ids if ids.count(i) > 1})
