@@ -21,6 +21,7 @@ import xbmcvfs
 
 from resources.lib import control
 from resources.lib import cache
+from resources.lib import credentials
 
 ADDON_ID = 'plugin.video.episodetracker'
 DEFAULT_REPO = 'bmoorewiz/et'
@@ -233,6 +234,12 @@ def prompt_install(version):
 def install(version):
 	"""Download, validate and extract the given version. Returns success."""
 	control.make_profile()
+	# Snapshot the credentials before anything is written. The extract only
+	# touches special://home/addons and the stored values live in
+	# addon_data, so in principle they are never at risk - but "in
+	# principle" is what the last three releases each assumed, and an
+	# update that loses the TorBox API key is not recoverable from here.
+	credentials.sync()
 	temp_dir = xbmcvfs.translatePath('special://temp/')
 	local_zip = os.path.join(temp_dir, '%s-%s.zip' % (ADDON_ID, version))
 
@@ -262,6 +269,11 @@ def install(version):
 
 	# Drop stale bytecode so the new sources are definitely what gets loaded.
 	_purge_pycache(os.path.join(addons_dir, ADDON_ID))
+
+	# Put anything back that the new version cannot see. A setting only
+	# survives an update while its id stays in the schema, so this is the
+	# guarantee that an id changing by accident cannot cost the user a key.
+	credentials.sync()
 
 	cache.delete(_CACHE_KEY)
 	xbmc.executebuiltin('UpdateLocalAddons')

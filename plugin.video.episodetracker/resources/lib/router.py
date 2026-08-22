@@ -105,7 +105,12 @@ def _dispatch():
 	if action == 'refresh':
 		return xbmc.executebuiltin('Container.Refresh')
 	if action == 'settings':
-		return control.open_settings()
+		control.open_settings()
+		# openSettings() blocks until the dialog closes. This is the only
+		# moment the add-on learns that a TorBox key was typed in, so it
+		# is the only chance to back it up.
+		from resources.lib import credentials
+		return credentials.sync()
 
 	return main_menu()
 

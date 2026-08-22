@@ -201,6 +201,24 @@ class SettingsSchema(AddonTestCase):
 		self.assertEqual(nameless, [],
 						 'settings with an id but no label: %s' % nameless)
 
+	def test_every_backed_up_credential_is_still_declared(self):
+		"""Hard requirement: an update must never cost the TorBox key.
+
+		A stored value only survives while its id stays in the schema -
+		Kodi drops anything it no longer recognises the next time it
+		rewrites the file. So renaming or removing one of these silently
+		signs the user out of that service on update, and the backup
+		cannot help if the id it restores into no longer exists.
+		"""
+		from resources.lib import credentials
+		companions = [name for names in credentials.COMPANIONS.values()
+					  for name in names]
+		missing = sorted(set(credentials.CREDENTIALS + tuple(companions))
+						 - self.declared)
+		self.assertEqual(missing, [],
+						 'these are backed up but no longer declared, so an '
+						 'update would drop them: %s' % missing)
+
 	def test_no_setting_id_is_declared_twice(self):
 		ids = re.findall(r'<setting\s+id="([^"]+)"', self.schema)
 		duplicates = sorted({i for i in ids if ids.count(i) > 1})

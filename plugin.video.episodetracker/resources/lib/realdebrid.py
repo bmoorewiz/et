@@ -16,6 +16,7 @@ from requests.adapters import HTTPAdapter
 
 from resources.lib import control
 from resources.lib import cache
+from resources.lib import credentials
 from resources.lib import health
 from resources.lib import mediafiles
 
@@ -230,9 +231,11 @@ def _maybe_refresh():
 
 
 def revoke():
-	for key in ('rd.token', 'rd.refresh', 'rd.expires', 'rd.client_id',
-				'rd.client_secret', 'rd.user'):
+	keys = ('rd.token', 'rd.refresh', 'rd.expires', 'rd.client_id',
+			'rd.client_secret', 'rd.user')
+	for key in keys:
 		control.set_setting(key, '')
+	credentials.forget(keys)
 
 
 def _fetch_username():

@@ -1,3 +1,19 @@
+v1.12.0
+- Account credentials are kept in the add-on's own file as well as Kodi's
+  settings, and put back whenever the settings copy has lost them. Kodi
+  rewrites its settings file whole, so anything that disturbs it takes
+  every credential at once - which is what happened. The TorBox API key
+  in particular now survives an update, a settings wipe, and a schema
+  that fails to load.
+- Signing out still sticks: revoking a service drops its backup too, so a
+  key you deliberately cleared is not resurrected on the next launch. The
+  settings copy always wins while it has a value, so editing a key in the
+  settings dialog behaves exactly as it looks.
+- The update now snapshots credentials before extracting and restores
+  after, and a test fails the build if a backed-up setting id is ever
+  renamed or removed from the schema - which is the only way an update
+  could still drop one.
+
 v1.11.3
 - Every message during a resolve now names the service actually being
   used. "Resolving with Real-Debrid..." was hardcoded and is the only

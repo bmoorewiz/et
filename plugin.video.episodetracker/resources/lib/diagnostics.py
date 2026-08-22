@@ -73,8 +73,16 @@ def _live_secrets():
 	logged.
 	"""
 	values = []
-	for key in _SECRET_SETTINGS:
-		value = control.setting(key, '')
+	candidates = [control.setting(key, '') for key in _SECRET_SETTINGS]
+	# The backup copy too. A token the settings file has lost is still the
+	# token that was in the log when it stopped working, and that log is
+	# exactly what gets uploaded when this goes wrong.
+	try:
+		from resources.lib import credentials
+		candidates += credentials.values()
+	except Exception:
+		control.error('could not read the credential backup for redaction')
+	for value in candidates:
 		# Short values would match far too much text.
 		if value and len(value) >= 8:
 			values.append(value)

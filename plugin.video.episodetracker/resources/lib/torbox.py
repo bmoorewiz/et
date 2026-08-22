@@ -19,6 +19,7 @@ from requests.adapters import HTTPAdapter
 
 from resources.lib import control
 from resources.lib import cache
+from resources.lib import credentials
 from resources.lib import health
 from resources.lib import mediafiles
 from resources.lib.realdebrid import _episode_match
@@ -353,6 +354,8 @@ def _fail(torrent_id, reason):
 
 def revoke():
 	control.set_setting('torbox.api_key', '')
+	# Drop the backup too, or the key comes back on the next launch.
+	credentials.forget(('torbox.api_key',))
 	# The account status is cached for an hour; without clearing it, a
 	# re-entered key would be judged on the old key's answer.
 	cache.delete('torbox_account_status')

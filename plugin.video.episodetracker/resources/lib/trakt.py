@@ -16,6 +16,7 @@ import requests
 
 from resources.lib import control
 from resources.lib import cache
+from resources.lib import credentials
 
 API_BASE = 'https://api.trakt.tv'
 API_VERSION = '2'
@@ -200,8 +201,10 @@ def _maybe_refresh():
 
 
 def revoke():
-	for key in ('trakt.token', 'trakt.refresh', 'trakt.expires', 'trakt.user'):
+	keys = ('trakt.token', 'trakt.refresh', 'trakt.expires', 'trakt.user')
+	for key in keys:
 		control.set_setting(key, '')
+	credentials.forget(keys)
 
 
 def _fetch_username():
