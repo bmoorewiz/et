@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.11.2" provider-name="bmoorewiz">
+<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.11.3" provider-name="bmoorewiz">
 	<requires>
 		<import addon="xbmc.python" version="3.0.0" />
 		<import addon="script.module.requests" version="2.22.0" />
@@ -24,6 +24,6 @@
 			<icon>resources/icon.png</icon>
 			<fanart>resources/fanart.png</fanart>
 		</assets>
-		<news>v1.11.2 - Makes a device that cannot save settings say so, instead of silently presenting as signed out. Diagnostics are now reachable from the main menu.</news>
+		<news>v1.11.3 - Messages during a resolve now name the debrid service actually in use. A TorBox-only install was told Real-Debrid was doing the work.</news>
 	</extension>
 </addon>

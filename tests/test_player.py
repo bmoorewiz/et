@@ -8,6 +8,7 @@ import xbmcplugin
 
 from support import AddonTestCase
 
+from resources.lib import control
 from resources.lib import player
 from resources.lib import scrobbler
 
@@ -369,3 +370,39 @@ class PlayedItemArtwork(AddonTestCase):
 				mock.patch('resources.lib.trakt.playback_progress', return_value=0):
 			player.play(dict(source(), cached_by=['TorBox']), EPISODE)
 		self.assertEqual(asked, [['TorBox']])
+
+
+class ResolveCaptionNamesTheRealService(AddonTestCase):
+	"""The progress caption during a resolve.
+
+	Reported: "it automatically uses real-debrid which is no longer setup".
+	It was not using Real-Debrid - the caption said so unconditionally,
+	because the string was written when Real-Debrid was the only provider.
+	It is the only thing on screen while sources are tried, so on a
+	TorBox-only install it named a dead service for the whole attempt.
+	"""
+
+	def caption(self, providers):
+		# The stub's progress dialog is a module-level object that keeps
+		# every message of the run, so clear it or this reads an earlier
+		# test's caption and passes on stale data.
+		del control.progress_bg.messages[:]
+		with mock.patch('resources.lib.debrid.providers',
+						return_value=providers), \
+				mock.patch('resources.lib.debrid.resolve_magnet',
+						   return_value=(None, 'nope', None)):
+			player.play(source(), EPISODE)
+		return control.progress_bg.messages[0][1]
+
+	def test_a_torbox_only_install_is_not_told_about_real_debrid(self):
+		caption = self.caption(['TorBox'])
+		self.assertIn('TorBox', caption)
+		self.assertNotIn('Real-Debrid', caption)
+
+	def test_a_real_debrid_only_install_still_says_real_debrid(self):
+		self.assertIn('Real-Debrid', self.caption(['Real-Debrid']))
+
+	def test_both_providers_are_named(self):
+		caption = self.caption(['Real-Debrid', 'TorBox'])
+		self.assertIn('Real-Debrid', caption)
+		self.assertIn('TorBox', caption)

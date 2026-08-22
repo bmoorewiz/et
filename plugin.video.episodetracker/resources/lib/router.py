@@ -631,7 +631,10 @@ def _preflight():
 		control.ok_dialog(33008)
 		return False
 	if not debrid.any_authorized():
-		control.notify(33007)
+		# A notification is too small for this: it is the reason nothing
+		# will play, and it names two services and where to set them up.
+		control.ok_dialog(control.lang(33007),
+						  heading=control.lang(33108))
 		return False
 	if not trakt.authorized():
 		control.notify(33006)
@@ -642,7 +645,10 @@ def _preflight():
 	# problem worth stopping for - the other takes over on its own.
 	ok, message = debrid.account_status()
 	if not ok:
-		control.ok_dialog(message, heading=control.lang(33005))
+		# The message already names each provider and its own complaint;
+		# heading it "Authorize Real-Debrid" blamed Real-Debrid for a
+		# TorBox-only failure.
+		control.ok_dialog(message, heading=control.lang(33108))
 		return False
 	_warn_if_expiring()
 	return True

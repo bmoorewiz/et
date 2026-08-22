@@ -1,3 +1,15 @@
+v1.11.3
+- Every message during a resolve now names the service actually being
+  used. "Resolving with Real-Debrid..." was hardcoded and is the only
+  thing on screen while sources are tried, so a TorBox-only install was
+  told a dead provider was doing the work. It now names whichever
+  services are configured.
+- A debrid account problem is no longer headed "Authorize Real-Debrid",
+  which blamed Real-Debrid for a TorBox failure, and "no debrid service
+  is set up" now says so instead of naming only Real-Debrid.
+- Two settings that drive both providers were labelled Real-Debrid:
+  the resolve timeout and the cache check.
+
 v1.11.2
 - A device that cannot save settings now says so. Kodi reports nothing
   when a setting write goes nowhere - a full or read-only profile fails

@@ -934,3 +934,38 @@ class StorageWarningInMenu(AddonTestCase):
 		with mock.patch.object(diagnostics, 'storage_problem') as check:
 			self.labels()
 		check.assert_not_called()
+
+
+class DebridMessagesNameTheRightService(AddonTestCase):
+	"""Preflight must not blame Real-Debrid for a TorBox problem.
+
+	Both messages predate TorBox support. On a TorBox-only install the
+	add-on refused to play and pointed at a service the user had already
+	stopped using, which reads as "it is still trying Real-Debrid".
+	"""
+
+	def _preflight(self, authorized, status):
+		with mock.patch.object(router.scrapers, 'available', return_value=True), \
+				mock.patch.object(router.trakt, 'authorized', return_value=True), \
+				mock.patch.object(router.debrid, 'any_authorized',
+								  return_value=authorized), \
+				mock.patch.object(router.debrid, 'account_status',
+								  return_value=status):
+			return router._preflight()
+
+	def test_a_torbox_failure_is_not_headed_authorize_real_debrid(self):
+		self.assertFalse(
+			self._preflight(True, (False, 'TorBox: on the free plan')))
+		heading, message = self.last_dialog('ok')[1], self.last_dialog('ok')[2]
+		self.assertNotIn('Real-Debrid', heading)
+		self.assertIn('TorBox', message)
+
+	def test_no_provider_at_all_names_both_options(self):
+		self.assertFalse(self._preflight(False, (True, '')))
+		message = self.last_dialog('ok')[2]
+		self.assertIn('TorBox', message)
+		self.assertIn('Real-Debrid', message)
+
+	def test_a_healthy_setup_passes(self):
+		with mock.patch.object(router, '_warn_if_expiring'):
+			self.assertTrue(self._preflight(True, (True, 'ok')))

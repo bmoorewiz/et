@@ -167,7 +167,7 @@ msgid "Keep resolved torrents in Real-Debrid cloud"
 msgstr ""
 
 msgctxt "#32051"
-msgid "Real-Debrid resolve timeout (seconds)"
+msgid "Debrid resolve timeout (seconds)"
 msgstr ""
 
 msgctxt "#32052"
@@ -179,7 +179,7 @@ msgid "Maximum sources to try"
 msgstr ""
 
 msgctxt "#32054"
-msgid "Check Real-Debrid cache before listing"
+msgid "Check debrid cache before listing"
 msgstr ""
 
 msgctxt "#32055"
@@ -352,7 +352,7 @@ msgid "Trakt is not authorized. Open Settings to sign in."
 msgstr ""
 
 msgctxt "#33007"
-msgid "Real-Debrid is not authorized. Open Settings to sign in."
+msgid "No debrid service is set up. Authorize Real-Debrid or add a TorBox API key in Settings."
 msgstr ""
 
 msgctxt "#33008"
@@ -376,7 +376,7 @@ msgid "No sources found."
 msgstr ""
 
 msgctxt "#33013"
-msgid "Resolving with Real-Debrid..."
+msgid "Resolving with %s..."
 msgstr ""
 
 msgctxt "#33014"
@@ -686,4 +686,8 @@ msgstr ""
 
 msgctxt "#33107"
 msgid "Cannot save settings - this device may be out of storage. Press to upload diagnostics"
+msgstr ""
+
+msgctxt "#33108"
+msgid "Debrid problem"
 msgstr ""

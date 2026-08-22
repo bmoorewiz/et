@@ -247,7 +247,12 @@ def play(source, entry):
 	queue = _candidates(source, entry)
 
 	pd = control.progress_bg
-	pd.create(control.addon_name, control.lang(33013))
+	# Name the service that will actually be tried. This said "Real-Debrid"
+	# unconditionally, so an install running on TorBox alone was told its
+	# dead provider was doing the work - and the caption is the only thing
+	# on screen during a resolve.
+	pd.create(control.addon_name,
+			  control.langf(33013, ', '.join(debrid.providers()) or '-'))
 	resolved, error, provider = None, None, None
 	try:
 		for position, candidate in enumerate(queue, 1):
