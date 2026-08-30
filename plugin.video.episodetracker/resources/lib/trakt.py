@@ -463,6 +463,29 @@ def has_aired(entry, now=None):
 	return True
 
 
+def _id_pairs(ids):
+	"""``(key, value)`` id pairs that can safely be used as a dict key.
+
+	Both sides of the playback lookup build a tuple key straight out of
+	Trakt's ``ids``, so a single value that is not a scalar raises
+	"unhashable type: 'dict'" and takes out the whole Next Episodes list
+	with it - a red error where the episodes should be, and nothing else
+	on screen. Trakt's ids are normally scalars, but the payloads around
+	them have grown nested objects before (extended=full started returning
+	images that way), and one arriving here should cost at most the ability
+	to match on that one id.
+
+	Anything that cannot be a dict key is not an id worth matching on, so
+	it is skipped. Booleans are excluded even though Python will hash
+	them: True is not an id, and it would collide with the integer 1.
+	"""
+	for key, value in (ids or {}).items():
+		if isinstance(value, bool) or not value:
+			continue
+		if isinstance(value, (str, int, float)):
+			yield key, value
+
+
 def playback_index(kind='episodes', limit=100):
 	"""Every id of every part-watched item, mapped to how far in it got.
 
@@ -483,9 +506,8 @@ def playback_index(kind='episodes', limit=100):
 			continue
 		if progress <= 0:
 			continue
-		for id_key, value in ((item.get(key) or {}).get('ids') or {}).items():
-			if value:
-				index[(id_key, value)] = progress
+		for id_key, value in _id_pairs((item.get(key) or {}).get('ids')):
+			index[(id_key, value)] = progress
 	return index
 
 
@@ -501,7 +523,7 @@ def apply_playback(entries, index=None):
 	if not index:
 		return entries
 	for entry in entries:
-		for id_key, value in (_media_ref(entry)['ids']).items():
+		for id_key, value in _id_pairs(_media_ref(entry)['ids']):
 			progress = index.get((id_key, value))
 			if progress:
 				entry['progress'] = progress
@@ -510,7 +532,13 @@ def apply_playback(entries, index=None):
 
 
 def _post_filter(entries):
-	entries = apply_playback([dict(e) for e in entries])
+	entries = [dict(e) for e in entries]
+	try:
+		entries = apply_playback(entries)
+	except Exception:
+		# Decoration, not the list itself. This blanked Next Episodes
+		# entirely once; a missing resume position is the better failure.
+		control.error('could not apply playback positions')
 	if control.get_bool('list.aired_only', True):
 		now = time.time()
 		kept = [e for e in entries if has_aired(e, now)]
@@ -766,15 +794,18 @@ def _media_ref(entry):
 	"""Trakt id reference for an entry, whichever media type it is."""
 	ids = {}
 	if is_movie(entry):
-		for src, key in (('movie_trakt', 'trakt'), ('imdb', 'imdb'),
-						 ('tmdb', 'tmdb'), ('movie_slug', 'slug')):
-			if entry.get(src):
-				ids[key] = entry[src]
+		pairs = (('movie_trakt', 'trakt'), ('imdb', 'imdb'),
+				 ('tmdb', 'tmdb'), ('movie_slug', 'slug'))
 	else:
-		for src, key in (('ep_trakt', 'trakt'), ('ep_imdb', 'imdb'),
-						 ('ep_tvdb', 'tvdb'), ('ep_tmdb', 'tmdb')):
-			if entry.get(src):
-				ids[key] = entry[src]
+		pairs = (('ep_trakt', 'trakt'), ('ep_imdb', 'imdb'),
+				 ('ep_tvdb', 'tvdb'), ('ep_tmdb', 'tmdb'))
+	# Scalars only. These go into the scrobble body as well as the
+	# playback lookup, so anything else is no more use to Trakt than it is
+	# as a dict key.
+	for src, key in pairs:
+		value = entry.get(src)
+		if value and not isinstance(value, bool) and isinstance(value, (str, int, float)):
+			ids[key] = value
 	return {'ids': ids}
 
 

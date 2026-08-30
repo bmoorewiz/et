@@ -36,9 +36,14 @@ def dispatch():
 	except Exception as exc:
 		control.error('request failed: %s' % (sys.argv[2:] or ''))
 		if control.handle >= 0:
+			# Pressing it uploads the log. The traceback is already in
+			# there, and the message alone never says which line raised -
+			# "unhashable type: 'dict'" on a blank screen cost a whole
+			# round trip to place.
 			control.add_directory_item('[COLOR red]%s[/COLOR]'
 									   % control.langf(33092, exc),
-									   {'action': 'settings'}, is_folder=False)
+									   {'action': 'upload_logs'},
+									   is_folder=False)
 			control.end_directory(cache_to_disc=False, content='')
 		else:
 			control.ok_dialog(control.langf(33092, exc))

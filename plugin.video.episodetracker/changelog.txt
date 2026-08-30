@@ -1,3 +1,16 @@
+v1.12.2
+- Fixes Next Episodes coming up empty with "Something went wrong:
+  unhashable type: 'dict'". Both sides of the resume-position lookup
+  built a dictionary key straight out of Trakt's ids, so a single value
+  in there that was an object rather than a number or a string raised on
+  the lookup and took the entire list down with it.
+- Values that cannot be a key are now skipped, costing at most the
+  ability to match on that one id, and the resume decoration can no
+  longer blank the list even if it fails some other way - the episodes
+  matter more than the position markers on them.
+- A crash row now opens the diagnostics upload instead of the settings
+  dialog. The message alone never says which line raised.
+
 v1.12.1
 - Fixes shows not playing. Two TorBox timeouts benched it for five
   minutes, and with Real-Debrid expired there was nothing left: the next

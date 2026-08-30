@@ -581,6 +581,10 @@ class DispatchSafetyNet(AddonTestCase):
 	Kodi treats a plugin that never calls endOfDirectory as a failure and
 	falls back to the add-on's root, so a bug anywhere becomes "it dumped
 	me on the main screen" with no explanation.
+
+	The row it leaves behind opens the diagnostics upload, because the
+	message alone never says which line raised: "unhashable type: 'dict'"
+	on an otherwise blank screen cost a whole round trip to place.
 	"""
 
 	def _dispatch(self, handle=1, **params):
@@ -969,3 +973,18 @@ class DebridMessagesNameTheRightService(AddonTestCase):
 	def test_a_healthy_setup_passes(self):
 		with mock.patch.object(router, '_warn_if_expiring'):
 			self.assertTrue(self._preflight(True, (True, 'ok')))
+
+
+class CrashRowOffersTheLog(AddonTestCase):
+	def test_the_error_row_uploads_diagnostics_rather_than_opening_settings(self):
+		query = '?action=next_episodes'
+		with mock.patch.object(sys, 'argv',
+							   ['plugin://plugin.video.episodetracker/', '1', query]), \
+				mock.patch.object(control, 'handle', 1), \
+				mock.patch.object(router, 'next_episodes_menu',
+								  side_effect=TypeError("unhashable type: 'dict'")):
+			router.dispatch()
+		urls = [entry['url'] for entry in xbmcplugin.ITEMS]
+		self.assertTrue(any('upload_logs' in url for url in urls), urls)
+		labels = [entry['item'].label for entry in xbmcplugin.ITEMS]
+		self.assertTrue(any('unhashable' in label for label in labels), labels)

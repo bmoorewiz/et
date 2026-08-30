@@ -965,3 +965,54 @@ class AuthorizationThatDoesNotStick(AddonTestCase):
 		self._authenticate(persists=False)
 		shown = ' '.join(str(part) for entry in xbmcgui.DIALOGS for part in entry)
 		self.assertIn('cannot save its settings', shown)
+
+
+class OddIdsDoNotBlankTheList(AddonTestCase):
+	"""Reported on screen: "Something went wrong: unhashable type: 'dict'".
+
+	Next Episodes came up empty with a red error and nothing else. Both
+	sides of the playback lookup build a tuple key straight out of Trakt's
+	ids, so one non-scalar value in there raised on the dict lookup and
+	took the whole list down - the episodes were fine, the decoration was
+	not.
+	"""
+
+	def setUp(self):
+		super(OddIdsDoNotBlankTheList, self).setUp()
+		self.set(**{'trakt.token': 'token', 'list.aired_only': False})
+
+	def test_a_nested_object_in_ids_is_skipped_not_fatal(self):
+		self.assertEqual(list(trakt._id_pairs({'trakt': 5, 'imdb': 'tt1',
+											   'images': {'poster': 'x'}})),
+						 [('trakt', 5), ('imdb', 'tt1')])
+
+	def test_a_list_in_ids_is_skipped_too(self):
+		self.assertEqual(list(trakt._id_pairs({'trakt': 5, 'aka': ['a', 'b']})),
+						 [('trakt', 5)])
+
+	def test_booleans_are_not_ids(self):
+		# True hashes, but it is not an id and it collides with 1.
+		self.assertEqual(list(trakt._id_pairs({'trakt': 1, 'private': True})),
+						 [('trakt', 1)])
+
+	def test_playback_index_survives_a_nested_id(self):
+		items = [{'progress': 40.0,
+				  'episode': {'ids': {'trakt': 99, 'images': {'x': 'y'}}}}]
+		with mock.patch.object(trakt, '_request', return_value=items):
+			index = trakt.playback_index('episodes')
+		self.assertEqual(index[('trakt', 99)], 40.0)
+
+	def test_an_entry_carrying_a_nested_id_still_gets_its_position(self):
+		entry = dict(EPISODE, ep_tmdb={'nested': 'object'})
+		index = {('trakt', 999): 40.0}
+		self.assertEqual(trakt.apply_playback([entry], index)[0]['progress'],
+						 40.0)
+
+	def test_the_list_survives_even_if_the_lookup_itself_raises(self):
+		# Defence in depth: a resume position is worth far less than the
+		# episodes it was decorating.
+		with mock.patch.object(trakt, 'apply_playback',
+							   side_effect=TypeError("unhashable type: 'dict'")):
+			entries = trakt._post_filter([dict(EPISODE)])
+		self.assertEqual(len(entries), 1)
+		self.assertEqual(entries[0]['show_title'], 'Severance')
