@@ -1,3 +1,14 @@
+v1.12.3
+- Fixes Trakt sign-in failing with no useful explanation. Trakt rate
+  limits the request that starts the device flow, and a 429 was reported
+  as "Authorization failed or timed out" - which reads as "try again",
+  and trying again is exactly what keeps the limit in place.
+- A rate limit now says so, and how long to wait, taken from Trakt's own
+  Retry-After when it sends one. Further attempts inside that window are
+  refused locally rather than spent on a request that cannot succeed.
+- While waiting for the code to be entered, a "slow down" from Trakt now
+  actually slows the polling down instead of continuing at the same rate.
+
 v1.12.2
 - Fixes Next Episodes coming up empty with "Something went wrong:
   unhashable type: 'dict'". Both sides of the resume-position lookup

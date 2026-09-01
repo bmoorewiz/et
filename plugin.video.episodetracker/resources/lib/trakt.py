@@ -84,15 +84,59 @@ def _headers(with_auth=True):
 # Authentication
 # ---------------------------------------------------------------------------
 
+_COOLDOWN_KEY = 'trakt_device_code_cooldown'
+# Used only when Trakt rate-limits without saying for how long.
+_DEFAULT_COOLDOWN = 300
+
+
+def _wait_text(seconds):
+	minutes = int(seconds) // 60
+	if minutes >= 2:
+		return '%d minutes' % minutes
+	return '%d seconds' % max(5, int(seconds))
+
+
+def _retry_after(resp):
+	try:
+		return max(5, int(resp.headers.get('Retry-After') or 0))
+	except (TypeError, ValueError):
+		return 0
+
+
+def _cooldown_remaining():
+	until = cache.get(_COOLDOWN_KEY) or 0
+	return max(0, int(until - time.time()))
+
+
 def authenticate():
 	"""Run the Trakt device-code flow, blocking until authorized or aborted."""
 	if not has_credentials():
 		if control.yesno_dialog(33041, heading=control.lang(33004)):
 			control.open_settings()
 		return False
+
+	# Trakt rate-limits the request that starts sign-in, and the old
+	# handling reported that as "authorization failed or timed out" - which
+	# reads as "try again", and trying again is what keeps the limit
+	# tripped. Four attempts in the reported log, every one a 429.
+	waiting = _cooldown_remaining()
+	if waiting:
+		control.ok_dialog(control.langf(33109, _wait_text(waiting)),
+						  heading=control.lang(33004))
+		return False
+
 	try:
 		resp = requests.post(DEVICE_CODE_URL, json={'client_id': client_id()},
 							 headers=_headers(with_auth=False), timeout=_TIMEOUT)
+		if resp.status_code == 429:
+			seconds = _retry_after(resp) or _DEFAULT_COOLDOWN
+			cache.set(_COOLDOWN_KEY, time.time() + seconds,
+					  hours=(seconds + 60) / 3600.0)
+			control.log('trakt rate limited sign-in; waiting %d seconds'
+						% seconds)
+			control.ok_dialog(control.langf(33109, _wait_text(seconds)),
+							  heading=control.lang(33004))
+			return False
 		resp.raise_for_status()
 		data = resp.json()
 	except Exception:
@@ -135,7 +179,15 @@ def authenticate():
 				break
 			# 400 = pending, 404 = invalid, 409 = already used, 410 = expired,
 			# 418 = denied, 429 = slow down. Keep polling only on "pending".
-			if token_resp.status_code not in (400, 429):
+			if token_resp.status_code == 429:
+				# 429 means the polling itself is too fast, so carrying on
+				# at the same rate is the one response guaranteed not to
+				# help. Back off to whatever Trakt asks for, or double.
+				interval = max(_retry_after(token_resp), interval * 2)
+				control.log('trakt asked us to slow down; polling every %ds'
+							% interval)
+				continue
+			if token_resp.status_code != 400:
 				break
 	finally:
 		pd.close()

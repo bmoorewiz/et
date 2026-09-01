@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Trakt: next-up episodes, scrobbles, playback position and hidden shows."""
 
+import time
 from unittest import mock
 
 import xbmcgui
@@ -1016,3 +1017,76 @@ class OddIdsDoNotBlankTheList(AddonTestCase):
 			entries = trakt._post_filter([dict(EPISODE)])
 		self.assertEqual(len(entries), 1)
 		self.assertEqual(entries[0]['show_title'], 'Severance')
+
+
+class RateLimitedSignIn(AddonTestCase):
+    """Trakt refusing to start sign-in, and not being told to try harder.
+
+    From the reported log: four presses of Authorize Trakt, every one a
+    429 from /oauth/device/code, and the only feedback was "Authorization
+    failed or timed out" - which reads as "try again", and trying again
+    is what keeps the limit tripped.
+    """
+
+    class Response(FakeResponse):
+        def __init__(self, payload=None, status_code=200, headers=None):
+            super(RateLimitedSignIn.Response, self).__init__(
+                payload, status_code=status_code)
+            self.headers = headers or {}
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError('%d' % self.status_code)
+
+    def _authenticate(self, response):
+        with mock.patch.object(trakt.requests, 'post', return_value=response), \
+                mock.patch.object(control, 'sleep'):
+            return trakt.authenticate()
+
+    def test_a_rate_limit_is_not_reported_as_a_generic_failure(self):
+        self.assertFalse(self._authenticate(self.Response(status_code=429)))
+        shown = ' '.join(str(p) for e in xbmcgui.DIALOGS for p in e)
+        self.assertIn('rate limiting', shown)
+
+    def test_it_honours_the_wait_trakt_asks_for(self):
+        self._authenticate(self.Response(status_code=429,
+                                         headers={'Retry-After': '120'}))
+        shown = ' '.join(str(p) for e in xbmcgui.DIALOGS for p in e)
+        self.assertIn('2 minutes', shown)
+
+    def test_a_second_attempt_does_not_go_out_at_all(self):
+        self._authenticate(self.Response(status_code=429,
+                                         headers={'Retry-After': '120'}))
+        with mock.patch.object(trakt.requests, 'post') as post:
+            self.assertFalse(trakt.authenticate())
+        post.assert_not_called()
+
+    def test_the_wait_expires(self):
+        self._authenticate(self.Response(status_code=429,
+                                         headers={'Retry-After': '120'}))
+        from resources.lib import cache
+        cache.set(trakt._COOLDOWN_KEY, time.time() - 1)
+        self.assertEqual(trakt._cooldown_remaining(), 0)
+
+    def test_polling_backs_off_when_told_to_slow_down(self):
+        # A fake clock, or this spins for the whole 60-second window.
+        self.use_clock(trakt)
+        code = self.Response({'device_code': 'D', 'user_code': 'U',
+                              'interval': 1, 'expires_in': 60})
+        slow = self.Response(status_code=429, headers={'Retry-After': '8'})
+        with mock.patch.object(trakt.requests, 'post',
+                               side_effect=[code] + [slow] * 200) as post:
+            trakt.authenticate()
+        # One request for the code, then polls. At a flat one-second
+        # interval that is sixty of them; backing off makes it a handful.
+        self.assertLess(post.call_count, 12, post.call_count)
+
+    def test_polling_without_a_rate_limit_keeps_its_interval(self):
+        self.use_clock(trakt)
+        code = self.Response({'device_code': 'D', 'user_code': 'U',
+                              'interval': 1, 'expires_in': 10})
+        pending = self.Response(status_code=400)
+        with mock.patch.object(trakt.requests, 'post',
+                               side_effect=[code] + [pending] * 200) as post:
+            trakt.authenticate()
+        self.assertGreater(post.call_count, 5, post.call_count)

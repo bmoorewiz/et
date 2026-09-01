@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-	<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.12.2" provider-name="bmoorewiz">
+	<addon id="plugin.video.episodetracker" name="Episode Tracker" version="1.12.3" provider-name="bmoorewiz">
 		<requires>
 			<import addon="xbmc.python" version="3.0.0" />
 			<import addon="script.module.requests" version="2.22.0" />
@@ -23,7 +23,7 @@
 				<icon>resources/icon.png</icon>
 				<fanart>resources/fanart.png</fanart>
 			</assets>
-			<news>v1.12.2 - Fixes Next Episodes showing only "unhashable type: 'dict'". An unexpected value in Trakt's ids took out the whole list; it is now skipped, and a crash row offers the log upload.</news>
+			<news>v1.12.3 - Trakt sign-in now says when Trakt is rate limiting it and how long to wait, instead of reporting a generic failure that invited the retrying which kept the limit in place.</news>
 		</extension>
 	</addon>
 	<addon id="repository.episodetracker" name="Episode Tracker Repository" version="1.0.0" provider-name="bmoorewiz">

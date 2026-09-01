@@ -691,3 +691,7 @@ msgstr ""
 msgctxt "#33108"
 msgid "Debrid problem"
 msgstr ""
+
+msgctxt "#33109"
+msgid "Trakt is rate limiting sign-in. Wait %s and try again - retrying sooner keeps the limit in place."
+msgstr ""
